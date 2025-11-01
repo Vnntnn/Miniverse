@@ -1,0 +1,18 @@
+{
+  "name": "miniverse",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "Project"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=Project",
+    "build": "npm run build --workspace=Project",
+    "preview": "npm run preview --workspace=Project",
+    "format": "dprint fmt --config=./configs/dprint.json"
+  },
+  "devDependencies": {
+    "dprint": "^0.47.0"
+  }
+}
