@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useWebSocket } from './useWebSocket';
 
 export type SessionType = 'Normal' | 'Config';
@@ -11,35 +11,34 @@ export interface TerminalLine {
   sessionType?: SessionType;
 }
 
-const WS_URL = 'ws://localhost:8080/ws';
-
 export const useTerminal = () => {
   const [lines, setLines] = useState<TerminalLine[]>([]);
   const [currentSession, setCurrentSession] = useState<SessionType>('Normal');
   const [isConnectedToSerial, setIsConnectedToSerial] = useState(false);
   const [connectedPort, setConnectedPort] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('Miniverse>');
-  
-  const { isConnected: isWebSocketConnected, messages, sendMessage } = useWebSocket(WS_URL);
+  const lineIdCounter = useRef(0);
 
-  const addLine = useCallback((content: string, type: TerminalLine['type'], sessionType?: SessionType) => {
-    setLines(prev => [...prev, {
-      id: `${Date.now()}-${Math.random()}`,
+  const { isConnected, messages, sendMessage } = useWebSocket('ws://localhost:8080/ws');
+
+  const addLine = useCallback((content: string, type: TerminalLine['type'] = 'output', sessionType?: SessionType) => {
+    const line: TerminalLine = {
+      id: (++lineIdCounter.current).toString(),
       content,
       timestamp: new Date(),
       type,
-      sessionType
-    }]);
-  }, []);
+      sessionType: sessionType || currentSession
+    };
+    setLines(prev => [...prev, line]);
+  }, [currentSession]);
 
   const sendCommand = useCallback((command: string) => {
-    addLine(`${prompt} ${command}`, 'input', currentSession);
-    
+    addLine(`${prompt} ${command}`, 'input');
     sendMessage({
       type: 'Command',
       data: { command }
     });
-  }, [prompt, currentSession, sendMessage, addLine]);
+  }, [prompt, addLine, sendMessage]);
 
   const clearTerminal = useCallback(() => {
     setLines([]);
@@ -52,12 +51,7 @@ export const useTerminal = () => {
           addLine(message.data.content, 'output', message.data.session_type);
           break;
         case 'Error':
-          addLine(message.data.message, 'error');
-          break;
-        case 'ModeChanged':
-          setCurrentSession(message.data.mode);
-          setPrompt(message.data.mode === 'Config' ? 'Miniverse(config)#' : 'Miniverse>');
-          addLine(`Mode changed to ${message.data.mode}`, 'system');
+          addLine(`Error: ${message.data.message}`, 'error');
           break;
         case 'Connected':
           setIsConnectedToSerial(true);
@@ -66,6 +60,11 @@ export const useTerminal = () => {
         case 'Disconnected':
           setIsConnectedToSerial(false);
           setConnectedPort(null);
+          break;
+        case 'ModeChanged':
+          const newSession = message.data.mode as SessionType;
+          setCurrentSession(newSession);
+          setPrompt(newSession === 'Normal' ? 'Miniverse(-Normal-)>' : 'Miniverse(-config-)#');
           break;
       }
     });
@@ -77,8 +76,9 @@ export const useTerminal = () => {
     isConnectedToSerial,
     connectedPort,
     prompt,
-    isWebSocketConnected,
+    isWebSocketConnected: isConnected,
     sendCommand,
-    clearTerminal
+    clearTerminal,
+    addLine
   };
 };
