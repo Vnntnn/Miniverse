@@ -68,7 +68,6 @@ impl CLIProcessor {
                 });
             },
             "clear" => {
-                // Clear command - frontend handles this
                 responses.push(WebSocketMessage::Output {
                     content: "".to_string(),
                     timestamp: Utc::now(),
@@ -105,23 +104,18 @@ impl CLIProcessor {
                         let port_text = if ports.is_empty() {
                             "No serial ports detected.".to_string()
                         } else {
-                            let mut text = "Available serial ports:\n".to_string();
+                            let mut text = "Available serial ports:\n\n".to_string();
                             for (i, port) in ports.iter().enumerate() {
-                                text.push_str(&format!("  {}. {} ({})\n", 
-                                    i + 1, 
-                                    port.port_name,
-                                    port.description.as_deref().unwrap_or("Unknown device")
-                                ));
+                                text.push_str(&format!("[{}] {}\n", i + 1, port.port_name));
                                 
-                                // Add more details if available
-                                if let Some(manufacturer) = &port.manufacturer {
-                                    text.push_str(&format!("     Manufacturer: {}\n", manufacturer));
+                                if let Some(desc) = &port.description {
+                                    text.push_str(&format!("    Description: {}\n", desc));
                                 }
-                                if let Some(product) = &port.product {
-                                    text.push_str(&format!("     Product: {}\n", product));
+                                if let Some(manufacturer) = &port.manufacturer {
+                                    text.push_str(&format!("    Manufacturer: {}\n", manufacturer));
                                 }
                                 if let (Some(vid), Some(pid)) = (port.vendor_id, port.product_id) {
-                                    text.push_str(&format!("     VID:PID = {:04X}:{:04X}\n", vid, pid));
+                                    text.push_str(&format!("    VID:PID = {:04X}:{:04X}\n", vid, pid));
                                 }
                                 text.push('\n');
                             }
@@ -144,7 +138,7 @@ impl CLIProcessor {
             "connect" => {
                 if parts.len() < 2 {
                     responses.push(WebSocketMessage::Output {
-                        content: "Usage: connect <port> [baud_rate]".to_string(),
+                        content: "Usage: connect <port> [baud_rate]\nExample: connect /dev/ttyACM0 9600".to_string(),
                         timestamp: Utc::now(),
                         session_type: SessionType::Config,
                     });
@@ -156,7 +150,6 @@ impl CLIProcessor {
                         9600
                     };
 
-                    // ใช้ tokio กับ async operation
                     let result = tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(
                             serial_manager.connect(port_name, baud_rate)
@@ -176,7 +169,7 @@ impl CLIProcessor {
                         },
                         Err(e) => {
                             responses.push(WebSocketMessage::Error {
-                                message: format!("Failed to connect to {}: {}", port_name, e),
+                                message: format!("Failed to connect: {}", e),
                             });
                         }
                     }
@@ -216,7 +209,7 @@ impl CLIProcessor {
                 self.session_type = SessionType::Normal;
                 responses.push(WebSocketMessage::ModeChanged { mode: SessionType::Normal });
                 responses.push(WebSocketMessage::Output {
-                    content: "← Exited configuration mode.".to_string(),
+                    content: "Exited configuration mode.".to_string(),
                     timestamp: Utc::now(),
                     session_type: SessionType::Normal,
                 });
@@ -234,70 +227,53 @@ impl CLIProcessor {
     }
 
     fn generate_help_text(&self, session: SessionType) -> String {
-        let mut help = String::new();
-        
         match session {
             SessionType::Normal => {
-                help.push_str(&format!(
-                    "{}",
-                    r#"
-┌─────────────────────────────────────────────────────────────┐
-│                       NORMAL SESSION COMMANDS               │
-├─────────────────────────────────────────────────────────────┤
-│  help          - Show available commands                    │
-│  ./info        - Display system information                 │
-│  config        - Enter configuration mode                   │
-│  clear         - Clear terminal screen                      │
-└─────────────────────────────────────────────────────────────┘
+                r#"
+Available Commands:
+------------------
+help         Show this help message
+./info       Display system information
+config       Enter configuration mode
+clear        Clear terminal screen
 
-💡 Tip: Type 'config' to manage serial connections.
-"#
-                ));
+Type 'config' to manage serial connections.
+"#.to_string()
             },
             SessionType::Config => {
-                help.push_str(&format!(
-                    "{}",
-                    r#"
-┌─────────────────────────────────────────────────────────────┐
-│                     CONFIGURATION MODE COMMANDS             │
-├─────────────────────────────────────────────────────────────┤
-│  help                    - Show available commands          │
-│  scan                    - Scan for available serial ports  │
-│  connect <port> [baud]   - Connect to a serial port         │
-│  disconnect              - Disconnect from current port     │
-│  status                  - Show connection status           │
-│  exit                    - Return to normal mode            │
-└─────────────────────────────────────────────────────────────┘
+                r#"
+Configuration Mode Commands:
+---------------------------
+help                    Show this help message
+scan                    Scan for available serial ports
+connect <port> [baud]   Connect to a serial port
+disconnect              Disconnect from current port
+status                  Show connection status
+exit                    Return to normal mode
 
-💡 Examples:
-   scan                      - Find available ports
-   connect /dev/ttyACM0      - Connect with default 9600 baud
-   connect /dev/ttyACM0 115200 - Connect with custom baud rate
-"#
-                ));
+Examples:
+  scan                      Find available ports
+  connect /dev/ttyACM0      Connect with default 9600 baud
+  connect /dev/ttyACM0 115200  Connect with custom baud rate
+"#.to_string()
             }
         }
-        
-        help
     }
 
     fn generate_system_info(&self) -> String {
         format!(
             r#"
-┌─────────────────────────────────────────────────────────────┐
-│                     SYSTEM INFORMATION                      │
-├─────────────────────────────────────────────────────────────┤
-│  Project:  {}                                               |
-│  Version:  {}                                               |
-│  Platform: {}                                               |
-├─────────────────────────────────────────────────────────────┤
-│  Backend:     Rust + Actix Web                              │
-│  Frontend:    Astro + React + TypeScript                    │
-│  Connection:   WebSocket Real-time                          │
-│  Serial:      tokio-serial                                  │
-└─────────────────────────────────────────────────────────────┘
+System Information
+------------------
+Project:  {}
+Version:  {}
+Platform: {}
 
-Ready for Physical Computing experiments!
+Backend:     Rust + Actix Web
+Frontend:    Astro + React + TypeScript
+Connection:  WebSocket Real-time
+Serial:      tokio-serial
+
 Type 'help' for available commands.
 Type 'config' to manage Arduino connections.
 "#,

@@ -3,28 +3,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { Terminal } from '../components/terminal/Terminal';
 ---
 
-<BaseLayout title="Miniverse Discovery Terminal">
-  <div class="container mx-auto px-4 py-8 relative z-10">
-    <header class="text-center mb-12">
-      <div class="flex flex-wrap justify-center gap-4">
-        <div class="flex items-center gap-2 px-4 py-2 bg-terminal-surface/50 border border-terminal-border rounded-full text-sm">
-          <div class="w-2 h-2 bg-cyber-green rounded-full animate-pulse"></div>
-          <span>WebSocket Ready</span>
-        </div>
-        <div class="flex items-center gap-2 px-4 py-2 bg-terminal-surface/50 border border-terminal-border rounded-full text-sm">
-          <div class="w-2 h-2 bg-cyber-blue rounded-full animate-pulse delay-500"></div>
-          <span>Serial Interface</span>
-        </div>
-        <div class="flex items-center gap-2 px-4 py-2 bg-terminal-surface/50 border border-terminal-border rounded-full text-sm">
-          <div class="w-2 h-2 bg-cyber-purple rounded-full animate-pulse delay-1000"></div>
-          <span>Rust Backend</span>
-        </div>
-      </div>
-    </header>
-
-    <main class="mb-16">
-      <Terminal client:load />
-    </main>
-
-  </div>
+<BaseLayout title="Miniverse Terminal">
+  <Terminal client:only="react" />
 </BaseLayout>

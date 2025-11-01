@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTerminal } from '../../hooks/useTerminal';
-import { cn } from '../../lib/utils';
 
 export const Terminal: React.FC = () => {
   const {
@@ -15,13 +14,36 @@ export const Terminal: React.FC = () => {
   } = useTerminal();
 
   const terminalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [command, setCommand] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (command.trim()) {
       sendCommand(command.trim());
+      setCommandHistory(prev => [...prev, command.trim()]);
       setCommand('');
+      setHistoryIndex(-1);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (commandHistory.length > 0) {
+        const newIndex = historyIndex === -1 ? commandHistory.length - 1 : Math.max(0, historyIndex - 1);
+        setHistoryIndex(newIndex);
+        setCommand(commandHistory[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex !== -1) {
+        const newIndex = Math.min(commandHistory.length - 1, historyIndex + 1);
+        setHistoryIndex(newIndex);
+        setCommand(commandHistory[newIndex] || '');
+      }
     }
   };
 
@@ -31,125 +53,85 @@ export const Terminal: React.FC = () => {
     }
   }, [lines]);
 
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   return (
-    <div className="relative w-full max-w-6xl mx-auto">
-      {/* Scanline effect */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyber-green/5 to-transparent animate-scan-line"></div>
-      </div>
-
-      <div className={cn(
-        "bg-terminal-surface border-2 border-terminal-border rounded-lg overflow-hidden",
-        "shadow-2xl shadow-cyber-green/20"
-      )}>
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-terminal-surface border-b border-terminal-border">
-          <div className="flex items-center gap-3">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500"></div>
-              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            </div>
-            
-            <div className="flex items-center gap-2 ml-4">
-              <span className="text-cyber-green font-mono text-sm animate-pulse">
-                MINIVERSE TERMINAL
-              </span>
-              <span className={cn(
-                "px-2 py-1 rounded text-xs font-mono",
-                currentSession === 'Config' 
-                  ? "bg-cyber-purple/20 text-cyber-purple border border-cyber-purple/30"
-                  : "bg-cyber-green/20 text-cyber-green border border-cyber-green/30"
-              )}>
-                {currentSession.toUpperCase()}
-              </span>
-            </div>
-          </div>
-
+    <div className="w-full h-screen bg-black text-gray-300 font-mono flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800">
+        <div className="flex items-center gap-4 text-sm">
+          <span className="font-semibold">Miniverse Terminal</span>
+          <span className={`px-2 py-0.5 rounded text-xs ${
+            currentSession === 'Config' 
+              ? 'bg-blue-900 text-blue-200 border border-blue-700'
+              : 'bg-gray-800 text-gray-300 border border-gray-700'
+          }`}>
+            {currentSession}
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-4 text-xs">
+          <span className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${isWebSocketConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            WS: {isWebSocketConnected ? 'Connected' : 'Disconnected'}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${isConnectedToSerial ? 'bg-green-500' : 'bg-gray-600'}`}></div>
+            Serial: {connectedPort || 'Not connected'}
+          </span>
           <button 
             onClick={clearTerminal}
-            className="px-3 py-1 text-xs bg-terminal-border/50 hover:bg-terminal-border rounded transition-colors"
-            title="Clear terminal"
+            className="px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded transition-colors"
           >
             Clear
           </button>
         </div>
+      </div>
 
-        {/* Terminal display */}
-        <div 
-          ref={terminalRef}
-          className="h-96 bg-terminal-bg p-4 overflow-y-auto font-mono text-sm"
-          style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #111111 100%)' }}
-        >
-          {lines.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-terminal-muted">
-              <div className="text-center">
-                {/* <div className="text-2xl mb-2">🌌</div> */}
-                <div>Waiting for connection...</div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {lines.map((line) => (
-                <div key={line.id} className={cn(
-                  "whitespace-pre-wrap",
-                  line.type === 'error' && "text-terminal-error",
-                  line.type === 'input' && "text-terminal-prompt",
-                  line.type === 'system' && "text-cyber-blue",
-                  line.type === 'output' && "text-terminal-text"
-                )}>
-                  {line.content}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Input area */}
-        <div className="border-t border-terminal-border bg-terminal-surface/50 p-4">
-          <form onSubmit={handleSubmit} className="flex items-center gap-2 font-mono">
-            <span className="text-terminal-prompt select-none">
-              {prompt}
-            </span>
-            <input
-              type="text"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              disabled={!isWebSocketConnected}
-              className={cn(
-                "flex-1 bg-transparent border-none outline-none text-terminal-text",
-                "placeholder-terminal-muted caret-cyber-green",
-                !isWebSocketConnected && "opacity-50 cursor-not-allowed"
-              )}
-              placeholder={!isWebSocketConnected ? "Not connected..." : "Type a command..."}
-              autoComplete="off"
-              spellCheck="false"
-            />
-          </form>
-        </div>
-
-        {/* Status bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-terminal-bg border-t border-terminal-border text-xs">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1">
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                isWebSocketConnected ? "bg-cyber-green animate-pulse" : "bg-terminal-muted"
-              )}></div>
-              WebSocket: {isWebSocketConnected ? 'Connected' : 'Disconnected'}
-            </span>
-            <span className="flex items-center gap-1">
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                isConnectedToSerial ? "bg-cyber-blue animate-pulse" : "bg-terminal-muted"
-              )}></div>
-              Serial: {connectedPort || 'Not connected'}
-            </span>
+      {/* Terminal Output */}
+      <div 
+        ref={terminalRef}
+        className="flex-1 overflow-y-auto p-4 space-y-1"
+        onClick={() => inputRef.current?.focus()}
+      >
+        {lines.length === 0 ? (
+          <div className="text-gray-600 text-sm">
+            <div>Miniverse Discovery Terminal</div>
+            <div>Type 'help' for available commands</div>
           </div>
-          <div className="text-terminal-muted">
-            Session: {currentSession}
-          </div>
-        </div>
+        ) : (
+          lines.map((line) => (
+            <div key={line.id} className={`text-sm ${
+              line.type === 'error' ? 'text-red-400' :
+              line.type === 'input' ? 'text-white' :
+              line.type === 'system' ? 'text-blue-400' :
+              'text-gray-300'
+            }`}>
+              <pre className="whitespace-pre-wrap font-mono">{line.content}</pre>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-gray-800 bg-gray-900">
+        <form onSubmit={handleSubmit} className="flex items-center p-4">
+          <span className="text-green-400 mr-2 select-none">{prompt}</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={!isWebSocketConnected}
+            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-600"
+            placeholder={!isWebSocketConnected ? "Connecting..." : "Type a command..."}
+            autoComplete="off"
+            spellCheck="false"
+          />
+        </form>
       </div>
     </div>
   );
