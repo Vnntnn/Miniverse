@@ -180,6 +180,13 @@ export class TerminalManager {
     this.history.push(trimmed);
     this.historyIndex = this.history.length;
 
+    // Client-side validation: allow only known patterns
+    if (!this.isAllowedCommand(trimmed)) {
+      this.writeln('\x1b[31m[ERR]\x1b[0m Unknown command. Type `help` for available commands.');
+      this.prompt();
+      return;
+    }
+
     // Local commands
     if (trimmed === 'clear') {
       this.term.clear();
@@ -231,6 +238,34 @@ export class TerminalManager {
     // Send to backend; prompt will be shown upon 'output' or 'error'
     this.pendingPrompt = false;
     wsClient.sendCommand(trimmed);
+  }
+
+  private isAllowedCommand(line: string): boolean {
+    const m = this.mode;
+    const low = line.toLowerCase();
+    // always allowed
+    if (['help','clear','config','normal','exit'].includes(low)) return true;
+    // config-mode commands
+    const isConfig = (
+      low.startsWith('ports') ||
+      low.startsWith('connect ') || low === 'connect' ||
+      low.startsWith('disconnect') || low.startsWith('status') ||
+      low.startsWith('transport serial') || low.startsWith('transport mqtt') ||
+      low.startsWith('mqtt sub ') || low.startsWith('mqtt unsub ')
+    );
+    if (m === 'config' && isConfig) return true;
+
+    // normal-mode commands
+    const isNormal = (
+      low === 'info' || low === 'about' || low === 'version' ||
+      low === 'temp' || low.startsWith('temp ') ||
+      low === 'distance' || low.startsWith('distance ') ||
+      low.startsWith('set light ') ||
+      low === 'light on' || low === 'light off' ||
+      low === 'lcd clear' || low.startsWith('lcd show ')
+    );
+    if (m === 'normal' && isNormal) return true;
+    return false;
   }
 
   private replaceCurrentLine(text: string) {
@@ -313,7 +348,7 @@ export class TerminalManager {
     this.writeln('==================');
     this.writeln('');
     this.writeln('System:');
-  this.writeln('  help           - Show this help');
+    this.writeln('  help           - Show this help');
     this.writeln('  clear          - Clear screen');
     this.writeln('  config         - Enter config mode');
     this.writeln('  normal         - Enter normal mode');
@@ -324,22 +359,17 @@ export class TerminalManager {
     this.writeln('  disconnect             - Disconnect serial');
     this.writeln('  status                 - Show status');
     this.writeln('  transport serial|mqtt  - Select routing (CONFIG only)');
+    this.writeln('  mqtt sub <topic>       - Subscribe to topic');
+    this.writeln('  mqtt unsub <topic>     - Unsubscribe from topic');
     this.writeln('');
     this.writeln('Normal Mode:');
-    this.writeln('  temp                   - Read temperature');
-    this.writeln('  distance               - Read distance');
-    this.writeln('  date | time | season   - Read date/time/season');
-    this.writeln('  light on/off/toggle    - Control LED');
-    this.writeln('  set light <0-255>      - Set LED brightness');
-    this.writeln('  set unit temp C|F|K    - Set temperature unit');
+    this.writeln('  temp <C|F|K>           - Read temperature');
+    this.writeln('  distance [id]          - Read distance');
+    this.writeln('  light on | light off   - LED shortcut full/zero');
+    this.writeln('  set light <0-255> [color] - Set LED brightness');
     this.writeln('  lcd clear              - Clear LCD');
-    this.writeln('  lcd show line "a","b" - Show two lines');
-    this.writeln('  /info | /help | /about | /version');
-    this.writeln('');
-    this.writeln('MQTT:');
-    this.writeln('  mqtt sub <topic>');
-    this.writeln('  mqtt unsub <topic>');
-    this.writeln('  mqtt pub <topic> <payload>');
+    this.writeln('  lcd show "a" ["b"]   - Show text on LCD');
+    this.writeln('  info | about | version');
     this.writeln('');
   }
 

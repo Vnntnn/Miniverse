@@ -9,6 +9,7 @@ const char* password = "YOUR_WIFI_PASSWORD";
 // MQTT Configuration
 const char* mqtt_server = "192.168.1.100";  // Update with your computer's IP
 const int mqtt_port = 1883;
+const char* BOARD_ID   = "board1";          // Set your board identifier
 
 // Sensor Configuration
 #define DHTPIN 2
@@ -54,9 +55,27 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     message += (char)payload[i];
   }
   
-  Serial.print("MQTT: ");
+  Serial.print("MQTT:");
+  Serial.print(" ");
+  Serial.print(topic);
+  Serial.print(" -> ");
   Serial.println(message);
+
+  // Parse topic structure: miniverse/<board>/<component>/command
+  String t(topic);
+  int p0 = t.indexOf('/');
+  int p1 = t.indexOf('/', p0 + 1);
+  int p2 = t.indexOf('/', p1 + 1);
+  int p3 = t.indexOf('/', p2 + 1);
+  String component = (p2 > 0 && p3 > p2) ? t.substring(p2 + 1, p3) : String("");
   
+  // For compatibility, still allow legacy topic "miniverse/command"
+  if (t == "miniverse/command") {
+    handleCommand(message);
+    return;
+  }
+
+  // Route based on component but reuse the text-based command handler
   handleCommand(message);
 }
 
@@ -71,19 +90,22 @@ void handleCommand(String cmd) {
     digitalWrite(LED_PIN, HIGH);
     ledState = true;
     Serial.println("OK");
-    client.publish("miniverse/status", "LED turned on");
+    String topic = String("miniverse/") + BOARD_ID + "/led/state";
+    client.publish(topic.c_str(), "ON");
   }
   else if (up == "LED_OFF" || up == "LIGHT OFF") {
     digitalWrite(LED_PIN, LOW);
     ledState = false;
     Serial.println("OK");
-    client.publish("miniverse/status", "LED turned off");
+    String topic = String("miniverse/") + BOARD_ID + "/led/state";
+    client.publish(topic.c_str(), "OFF");
   }
   else if (up == "LED_TOGGLE" || up == "LIGHT TOGGLE") {
     ledState = !ledState;
     digitalWrite(LED_PIN, ledState ? HIGH : LOW);
     Serial.println("OK");
-    client.publish("miniverse/status", ledState ? "LED on" : "LED off");
+    String topic = String("miniverse/") + BOARD_ID + "/led/state";
+    client.publish(topic.c_str(), ledState ? "ON" : "OFF");
   }
   // set light <value>
   else if (up.startsWith("SET LIGHT ")) {
@@ -91,6 +113,10 @@ void handleCommand(String cmd) {
     val = constrain(val, 0, 255);
     analogWrite(LED_PIN, val);
     Serial.println("OK");
+    String topic = String("miniverse/") + BOARD_ID + "/led/state";
+    char buf[6];
+    itoa(val, buf, 10);
+    client.publish(topic.c_str(), buf);
   }
   
   // Sensor Readings
@@ -100,6 +126,8 @@ void handleCommand(String cmd) {
       char buf[32];
       sprintf(buf, "TEMP:%.1fC", temp);
       Serial.println(buf);
+      String topic = String("miniverse/") + BOARD_ID + "/temp/state";
+      client.publish(topic.c_str(), buf);
     } else {
       Serial.println("ERROR: Failed to read temperature");
     }
@@ -110,6 +138,8 @@ void handleCommand(String cmd) {
       char buf[32];
       sprintf(buf, "Humidity: %.1f%%", hum);
       Serial.println(buf);
+      String topic = String("miniverse/") + BOARD_ID + "/humidity/state";
+      client.publish(topic.c_str(), buf);
     } else {
       Serial.println("ERROR: Failed to read humidity");
     }
@@ -120,8 +150,10 @@ void handleCommand(String cmd) {
     
     if (!isnan(temp) && !isnan(hum)) {
       char buf[64];
-      sprintf(buf, "Temp: %.1f°C, Humidity: %.1f%%", temp, hum);
+      sprintf(buf, "Temp: %.1fC, Humidity: %.1f%%", temp, hum);
       Serial.println(buf);
+      String topic = String("miniverse/") + BOARD_ID + "/env/state";
+      client.publish(topic.c_str(), buf);
     } else {
       Serial.println("ERROR: Failed to read sensors");
     }
@@ -156,7 +188,9 @@ void reconnect() {
     
     if (client.connect("MiniverseArduino")) {
       Serial.println("connected");
-      client.subscribe("miniverse/command");
+      // Subscribe to per-component command topics: miniverse/<board>/<component>/command
+      client.subscribe("miniverse/+/+/command");
+      client.subscribe("miniverse/command"); // legacy
       client.publish("miniverse/status", "Arduino connected");
     } else {
       Serial.print("failed, rc=");

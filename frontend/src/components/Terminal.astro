@@ -236,7 +236,7 @@
       dot?.classList.remove('gray'); dot?.classList.add('green');
       const list = (subs && subs.length) ? subs : ['miniverse/#'];
       const subStr = list.join('\n');
-      if (topics) topics.textContent = `pub: ${publish ?? 'miniverse/command'}\nsub:\n${subStr}`;
+      if (topics) topics.textContent = `sub:\n${subStr}`;
       if (toggle) {
         toggle.style.display = 'inline-block';
         toggle.classList.toggle('active', topicsExpanded);
@@ -302,7 +302,8 @@
         const arr = monitorStore.get(e.topic) || [];
         const now = new Date();
         const ts = now.toTimeString().slice(0,8);
-        arr.push({ ts, payload: e.payload });
+        const sensor = parseSensorFromTopic(e.topic);
+        arr.push({ ts, payload: e.payload, sensor });
         while (arr.length > PER_TOPIC_LIMIT) arr.shift();
         monitorStore.set(e.topic, arr);
         renderMonitor();
@@ -351,7 +352,8 @@
       parts.push(`<div class="topic-block">`);
       parts.push(`<div class="topic-title">${topic}</div>`);
       items.forEach((m: any) => {
-        parts.push(`<div class="msg-row"><span class="msg-ts">${m.ts}</span><span class="msg-payload">${escapeHtml(m.payload)}</span></div>`);
+        const label = m.sensor ? ` <span style=\"color:#9FB2CC\">(${m.sensor})</span>` : '';
+        parts.push(`<div class="msg-row"><span class="msg-ts">${m.ts}</span><span class="msg-payload">${escapeHtml(m.payload)}</span>${label}</div>`);
       });
       parts.push(`</div>`);
     });
@@ -362,6 +364,15 @@
 
   function escapeHtml(s: string) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function parseSensorFromTopic(topic: string): string | null {
+    // Expect: miniverse/<board>/<component>/<suffix>
+    const segs = topic.split('/');
+    if (segs.length >= 4 && segs[0] === 'miniverse') {
+      return segs[2];
+    }
+    return null;
   }
 
   const monitorToggle = document.getElementById('monitor-toggle');

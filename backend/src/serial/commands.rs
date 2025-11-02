@@ -1,5 +1,6 @@
 use crate::events::{SystemEvent, SensorDetail};
 use crate::state::{AppState, Transport};
+use std::borrow::Cow;
 use crate::serial::SerialBridge;
 
 pub async fn handle_serial_command(cmd: &str, state: &AppState) -> SystemEvent {
@@ -17,21 +18,27 @@ pub async fn handle_serial_command_with_transport(
     let command = parts.first().copied().unwrap_or("");
     
     match command {
+        // Config mode utilities
         "ports" => handle_ports().await,
         "connect" => handle_connect(&parts[1..], state).await,
         "disconnect" => handle_disconnect(state).await,
         "status" => handle_status(state).await,
-        // MQTT utility commands
+        "transport" => handle_transport(&parts[1..], state).await,
+        // MQTT utilities
         "mqtt" => handle_mqtt(&parts[1..], state).await,
-    // Transport selector
-    "transport" => handle_transport(&parts[1..], state).await,
-    // Friendly aliases and firmware meta
-        "/help" => SystemEvent::Output { content: backend_help_text() },
-        "/version" => SystemEvent::Output { content: "Miniverse Firmware: v1.0.0".to_string() },
-        "/about" => SystemEvent::Output { content: "Miniverse Arduino Firmware - Physical Computing & IoT".to_string() },
-        "/info" | "info" => handle_info(state).await,
-        // For all other commands, forward using current transport
-        _ => forward_via_transport_override(cmd, state, transport_override).await,
+        // Info and meta
+        "info" => handle_info(state).await,
+        "help" => SystemEvent::Output { content: backend_help_text() },
+        "about" => SystemEvent::Output { content: "Miniverse Arduino Firmware - Physical Computing & IoT".to_string() },
+        "version" => SystemEvent::Output { content: "Miniverse Firmware: v1.0.0".to_string() },
+        // Device commands (Normal mode)
+        "temp" => exec_temp(&parts[1..], state, transport_override).await,
+        "distance" => exec_distance(&parts[1..], state, transport_override).await,
+        "set" => exec_set(&parts[1..], state, transport_override).await,
+        "light" => exec_light(&parts[1..], state, transport_override).await,
+        "lcd" => exec_lcd(&parts[1..], state, transport_override).await,
+        // Reject unknowns explicitly
+        _ => SystemEvent::Error { source: "cli".to_string(), message: "Unknown command. Type 'help' for available commands.".to_string() },
     }
 }
 
@@ -41,13 +48,12 @@ fn backend_help_text() -> String {
     s.push_str("| System                 | help, clear, config, normal/exit       |\n");
     s.push_str("| Serial (config mode)   | ports, connect <n> [baud],             |\n");
     s.push_str("|                        | disconnect, status, /info              |\n");
-    s.push_str("| Device (normal mode)   | temp, distance, date, time, season     |\n");
-    s.push_str("| LED                    | light on/off/toggle, set light <0-255> |\n");
-    s.push_str("| Units                  | set unit temp <C|F|K>                 |\n");
-    s.push_str("| LCD                    | lcd clear, lcd show line \"a\",\"b\"   |\n");
-    s.push_str("| Firmware Meta          | /help, /version, /about, /info         |\n");
-    s.push_str("| Transport              | transport serial | transport mqtt        |\n");
-    s.push_str("| MQTT                   | mqtt sub <topic>, mqtt unsub <topic>, mqtt pub <topic> <payload> |\n");
+    s.push_str("| Device (normal mode)   | temp <C|F|K>, distance [id]            |\n");
+    s.push_str("| LED                    | light on/off, set light <0-255> [color]|\n");
+    s.push_str("| LCD                    | lcd clear, lcd show \"a\" [\"b\"]     |\n");
+    s.push_str("| Firmware Meta          | help, version, about, info             |\n");
+    s.push_str("| Transport              | transport serial | transport mqtt      |\n");
+    s.push_str("| MQTT                   | mqtt sub <topic>, mqtt unsub <topic>   |\n");
     s.push_str("+----------------------------------------------------------------+\n");
     s
 }
@@ -148,6 +154,108 @@ async fn handle_mqtt(args: &[&str], state: &AppState) -> SystemEvent {
             }
         }
         _ => SystemEvent::Output { content: "Usage:\n  mqtt sub <topic>\n  mqtt unsub <topic>\n  mqtt pub <topic> <payload>\n".to_string() },
+    }
+}
+
+// ===== Device command executors =====
+
+fn board_id_from_name(name: Option<&str>) -> String {
+    let raw = name.unwrap_or("board1");
+    let mut s = raw.to_lowercase().replace(' ', "_");
+    if s.is_empty() { s = "board1".into(); }
+    s
+}
+
+async fn publish_component_command(state: &AppState, component: &str, payload: &str) -> Result<(), String> {
+    let serial = state.serial.read().await;
+    let bid = board_id_from_name(serial.get_board_name());
+    let topic = format!("miniverse/{}/{}/command", bid, component);
+    let mqtt = state.mqtt.read().await;
+    mqtt.publish(&topic, payload.as_bytes()).await
+}
+
+async fn exec_temp(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    // Validate optional unit
+    let unit = args.get(0).map(|u| u.to_ascii_uppercase());
+    if let Some(u) = &unit {
+        if u != "C" && u != "F" && u != "K" {
+            return SystemEvent::Error { source: "cli".into(), message: "Usage: temp <C|F|K>".into() };
+        }
+    }
+    let payload = match unit { Some(u) => format!("temp {}", u), None => "temp".to_string() };
+    match transport_override.unwrap_or(*state.transport.read().await) {
+        Transport::Serial => forward_to_arduino(&payload, state).await,
+        Transport::Mqtt => match publish_component_command(state, "temp", &payload).await {
+            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
+            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        },
+    }
+}
+
+async fn exec_distance(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    let payload = if let Some(id) = args.get(0) { format!("distance {}", id) } else { "distance".to_string() };
+    match transport_override.unwrap_or(*state.transport.read().await) {
+        Transport::Serial => forward_to_arduino(&payload, state).await,
+        Transport::Mqtt => match publish_component_command(state, "distance", &payload).await {
+            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
+            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        },
+    }
+}
+
+async fn exec_set(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    // support: set light <0-255> [color]
+    if args.get(0) != Some(&"light") {
+        return SystemEvent::Error { source: "cli".into(), message: "Usage: set light <0-255> [color]".into() };
+    }
+    let val = match args.get(1).and_then(|v| v.parse::<u16>().ok()) { Some(v) if v <= 255 => v, _ => {
+        return SystemEvent::Error { source: "cli".into(), message: "Usage: set light <0-255> [color]".into() };
+    }};
+    let color = args.get(2).copied();
+    let payload = match color { Some(c) => format!("set light {} {}", val, c), None => format!("set light {}", val) };
+    match transport_override.unwrap_or(*state.transport.read().await) {
+        Transport::Serial => forward_to_arduino(&payload, state).await,
+        Transport::Mqtt => match publish_component_command(state, "led", &payload).await {
+            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
+            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        },
+    }
+}
+
+async fn exec_light(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    let sub = args.get(0).copied().unwrap_or("");
+    match sub {
+        "on" => exec_set(&["light", "255"], state, transport_override).await,
+        "off" => exec_set(&["light", "0"], state, transport_override).await,
+        _ => SystemEvent::Error { source: "cli".into(), message: "Usage: light <on|off>".into() },
+    }
+}
+
+async fn exec_lcd(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    let sub = args.get(0).copied().unwrap_or("");
+    match sub {
+        "clear" => {
+            let payload = "lcd clear".to_string();
+            match transport_override.unwrap_or(*state.transport.read().await) {
+                Transport::Serial => forward_to_arduino(&payload, state).await,
+                Transport::Mqtt => match publish_component_command(state, "lcd", &payload).await {
+                    Ok(_) => SystemEvent::Output { content: "LCD: cleared".into() },
+                    Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+                },
+            }
+        }
+        "show" => {
+            // take the rest of the line after 'lcd '
+            let payload = format!("lcd {}", args.join(" "));
+            match transport_override.unwrap_or(*state.transport.read().await) {
+                Transport::Serial => forward_to_arduino(&payload, state).await,
+                Transport::Mqtt => match publish_component_command(state, "lcd", &payload).await {
+                    Ok(_) => SystemEvent::Output { content: "LCD: show".into() },
+                    Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+                },
+            }
+        }
+        _ => SystemEvent::Error { source: "cli".into(), message: "Usage: lcd <clear|show \"a\" [\"b\"]>".into() },
     }
 }
 
