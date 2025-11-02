@@ -200,6 +200,11 @@ async fn publish_component_command(state: &AppState, component: &str, payload: &
     mqtt.publish(&topic, payload.as_bytes()).await
 }
 
+fn component_topic_sync(serial: &crate::serial::SerialBridge, component: &str) -> String {
+    let bid = board_id_from_name(serial.get_board_name());
+    format!("miniverse/{}/{}/command", bid, component)
+}
+
 async fn exec_temp(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
     // Validate optional unit
     let unit = args.get(0).map(|u| u.to_ascii_uppercase());
@@ -211,9 +216,15 @@ async fn exec_temp(args: &[&str], state: &AppState, transport_override: Option<T
     let payload = match unit { Some(u) => format!("temp {}", u), None => "temp".to_string() };
     match transport_override.unwrap_or(*state.transport.read().await) {
         Transport::Serial => forward_to_arduino(&payload, state).await,
-        Transport::Mqtt => match publish_component_command(state, "temp", &payload).await {
-            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
-            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        Transport::Mqtt => {
+            let serial = state.serial.read().await;
+            let topic = component_topic_sync(&serial, "temp");
+            drop(serial);
+            let mqtt = state.mqtt.read().await;
+            match mqtt.publish(&topic, payload.as_bytes()).await {
+                Ok(_) => SystemEvent::Output { content: format!("MQTT: sent {} - {} - ok", topic, payload) },
+                Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+            }
         },
     }
 }
@@ -222,9 +233,15 @@ async fn exec_distance(args: &[&str], state: &AppState, transport_override: Opti
     let payload = if let Some(id) = args.get(0) { format!("distance {}", id) } else { "distance".to_string() };
     match transport_override.unwrap_or(*state.transport.read().await) {
         Transport::Serial => forward_to_arduino(&payload, state).await,
-        Transport::Mqtt => match publish_component_command(state, "distance", &payload).await {
-            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
-            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        Transport::Mqtt => {
+            let serial = state.serial.read().await;
+            let topic = component_topic_sync(&serial, "distance");
+            drop(serial);
+            let mqtt = state.mqtt.read().await;
+            match mqtt.publish(&topic, payload.as_bytes()).await {
+                Ok(_) => SystemEvent::Output { content: format!("MQTT: sent {} - {} - ok", topic, payload) },
+                Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+            }
         },
     }
 }
@@ -241,9 +258,15 @@ async fn exec_set(args: &[&str], state: &AppState, transport_override: Option<Tr
     let payload = match color { Some(c) => format!("set light {} {}", val, c), None => format!("set light {}", val) };
     match transport_override.unwrap_or(*state.transport.read().await) {
         Transport::Serial => forward_to_arduino(&payload, state).await,
-        Transport::Mqtt => match publish_component_command(state, "led", &payload).await {
-            Ok(_) => SystemEvent::Output { content: format!("MQTT: {}", payload) },
-            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+        Transport::Mqtt => {
+            let serial = state.serial.read().await;
+            let topic = component_topic_sync(&serial, "led");
+            drop(serial);
+            let mqtt = state.mqtt.read().await;
+            match mqtt.publish(&topic, payload.as_bytes()).await {
+                Ok(_) => SystemEvent::Output { content: format!("MQTT: sent {} - {} - ok", topic, payload) },
+                Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+            }
         },
     }
 }
@@ -285,9 +308,15 @@ async fn exec_lcd(args: &[&str], state: &AppState, transport_override: Option<Tr
                     };
                     match transport_override.unwrap_or(*state.transport.read().await) {
                         Transport::Serial => forward_to_arduino(&payload, state).await,
-                        Transport::Mqtt => match publish_component_command(state, "lcd", &payload).await {
-                            Ok(_) => SystemEvent::Output { content: "LCD: show".into() },
-                            Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+                        Transport::Mqtt => {
+                            let serial = state.serial.read().await;
+                            let topic = component_topic_sync(&serial, "lcd");
+                            drop(serial);
+                            let mqtt = state.mqtt.read().await;
+                            match mqtt.publish(&topic, payload.as_bytes()).await {
+                                Ok(_) => SystemEvent::Output { content: format!("MQTT: sent {} - {} - ok", topic, payload) },
+                                Err(e) => SystemEvent::Error { source: "mqtt".into(), message: e },
+                            }
                         },
                     }
                 }

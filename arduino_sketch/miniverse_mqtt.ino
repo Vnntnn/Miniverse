@@ -1,32 +1,46 @@
-#include <ESP8266WiFi.h>
+#include <WiFiS3.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 // WiFi Configuration
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "rujihouse";
+const char* password = "0969296176";
 
 // MQTT Configuration
-const char* mqtt_server = "192.168.1.100";  // Update with your computer's IP
+const char* mqtt_server = "192.168.1.100";  // TODO: set to your broker IP
 const int mqtt_port = 1883;
-const char* BOARD_ID   = "board1";          // Set your board identifier
+const char* BOARD_ID   = "arduino_uno_wifi_r4";  // Board identifier used in topics
 
 // Sensor Configuration
 #define DHTPIN 2
 #define DHTTYPE DHT22
 #define LED_PIN 13
+#define TRIG_PIN 7
+#define ECHO_PIN 6
 
 DHT dht(DHTPIN, DHTTYPE);
-WiFiClient espClient;
-PubSubClient client(espClient);
+WiFiClient netClient;
+PubSubClient client(netClient);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 bool ledState = false;
 
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
   
   dht.begin();
+  // LCD init (ignore if not connected)
+  Wire.begin();
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Miniverse R4");
   setupWiFi();
   
   client.setServer(mqtt_server, mqtt_port);
@@ -132,6 +146,28 @@ void handleCommand(String cmd) {
       Serial.println("ERROR: Failed to read temperature");
     }
   }
+  else if (up == "DISTANCE" || up.startsWith("DISTANCE ")) {
+    // HC-SR04 measurement
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    unsigned long dur = pulseIn(ECHO_PIN, HIGH, 30000UL);
+    float cm = (dur == 0) ? -1.0 : (dur * 0.0343f) / 2.0f;
+    char buf[32];
+    if (cm < 0) {
+      strcpy(buf, "DIST:ERR");
+    } else {
+      dtostrf(cm, 0, 1, buf);
+      char out[40];
+      snprintf(out, sizeof(out), "DIST:%scm", buf);
+      strcpy(buf, out);
+    }
+    Serial.println(buf);
+    String topic = String("miniverse/") + BOARD_ID + "/distance/state";
+    client.publish(topic.c_str(), buf);
+  }
   else if (cmd == "READ_HUM") {
     float hum = dht.readHumidity();
     if (!isnan(hum)) {
@@ -157,6 +193,29 @@ void handleCommand(String cmd) {
     } else {
       Serial.println("ERROR: Failed to read sensors");
     }
+  }
+  // LCD
+  else if (up == "LCD CLEAR") {
+    lcd.clear();
+    client.publish((String("miniverse/")+BOARD_ID+"/lcd/state").c_str(), "CLEARED");
+  }
+  else if (up.startsWith("LCD SHOW ")) {
+    String rest = cmd.substring(9);
+    String l1="", l2=""; int idx=0;
+    for (int i=0;i<2;i++) {
+      int s = rest.indexOf('"', idx);
+      int e = (s>=0)?rest.indexOf('"', s+1):-1;
+      if (s>=0 && e> s) {
+        String seg = rest.substring(s+1, e);
+        if (i==0) l1 = seg; else l2 = seg;
+        idx = e+1;
+      }
+    }
+    lcd.clear(); lcd.setCursor(0,0); lcd.print(l1);
+    if (l2.length()>0) { lcd.setCursor(0,1); lcd.print(l2); }
+    String topic = String("miniverse/") + BOARD_ID + "/lcd/state";
+    String payload = String("LCD:") + l1 + (l2.length()?String("|")+l2:"");
+    client.publish(topic.c_str(), payload.c_str());
   }
   
   // System Info
@@ -192,9 +251,11 @@ void reconnect() {
     
     if (client.connect("MiniverseArduino")) {
       Serial.println("connected");
-      // Subscribe to per-component command topics: miniverse/<board>/<component>/command
-      client.subscribe("miniverse/+/+/command");
-      client.subscribe("miniverse/command"); // legacy
+  // Subscribe to per-component command topics: miniverse/<board>/<component>/command
+  client.subscribe("miniverse/+/+/command");
+  String myCmds = String("miniverse/") + BOARD_ID + "/+/command";
+  client.subscribe(myCmds.c_str());
+  client.subscribe("miniverse/command"); // legacy
       client.publish("miniverse/status", "Arduino connected");
     } else {
       Serial.print("failed, rc=");

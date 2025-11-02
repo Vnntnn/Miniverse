@@ -137,7 +137,21 @@ export class TerminalManager {
         
       case 'output':
   this.writeln('');
-  this.writeln(`${e.content}`);
+  // Pretty print MQTT sent acknowledgements
+  if (e.content.startsWith('MQTT: sent ')) {
+    // Format: MQTT: sent <topic> - <payload> - ok
+    const m = e.content.match(/^MQTT: sent\s+([^\s]+)\s+-\s+(.+?)\s+-\s+ok$/);
+    if (m) {
+      const topic = m[1];
+      const payload = m[2];
+      const sensor = this.sensorFromTopic(topic) || '';
+      this.writeln(`sent ${topic} – ${sensor ? sensor+': ' : ''}${payload} – success`);
+    } else {
+      this.writeln(`${e.content}`);
+    }
+  } else {
+    this.writeln(`${e.content}`);
+  }
         this.pendingPrompt = false;
         this.prompt();
         break;
@@ -160,7 +174,10 @@ export class TerminalManager {
         
       case 'mqtt_message':
   this.writeln('');
-  this.writeln(`\x1b[38;2;0;180;200m[MQTT]\x1b[0m ${e.topic}: ${e.payload}`);
+  {
+    const sensor = this.sensorFromTopic(e.topic);
+    this.writeln(`received ${e.topic} – ${sensor ? sensor+': ' : ''}${e.payload}`);
+  }
         // Ensure the prompt is visible after async MQTT output arrives
         this.pendingPrompt = false;
         this.prompt();
@@ -340,6 +357,12 @@ export class TerminalManager {
 
     lines.forEach(l => this.term.writeln(l));
     this.prompt();
+  }
+
+  private sensorFromTopic(topic: string): string | null {
+    const segs = topic.split('/');
+    if (segs.length >= 4 && segs[0] === 'miniverse') return segs[2];
+    return null;
   }
 
   private showHelp() {
