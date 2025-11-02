@@ -16,9 +16,9 @@ const char* BOARD_ID   = "arduino_uno_wifi_r4";  // Board identifier used in top
 // Sensor Configuration
 #define DHTPIN 2
 #define DHTTYPE DHT22
-#define LED_PIN 13
-#define TRIG_PIN 7
-#define ECHO_PIN 6
+#define LED_PIN 5
+#define TRIG_PIN 9
+#define ECHO_PIN 8
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClient netClient;
