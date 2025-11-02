@@ -1,11 +1,12 @@
 use crate::events::{ClientCommand, SystemEvent};
-use crate::serial::handle_serial_command;
+use crate::serial::handle_serial_command_with_transport;
 use crate::state::AppState;
+use crate::state::Transport;
 
-pub async fn handle_command(cmd: ClientCommand, state: &AppState) -> SystemEvent {
+pub async fn handle_command(cmd: ClientCommand, state: &AppState, transport: Option<Transport>) -> SystemEvent {
     match cmd {
         ClientCommand::Command { command } => {
-            handle_serial_command(&command, state).await
+            handle_serial_command_with_transport(&command, state, transport).await
         }
         
         ClientCommand::ChangeMode { mode } => {

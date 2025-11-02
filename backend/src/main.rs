@@ -34,6 +34,8 @@ async fn main() -> std::io::Result<()> {
     log::info!("Creating application state...");
     let config = Config::default();
     let state = web::Data::new(AppState::new(config, mqtt, serial));
+    // Initialize default MQTT topics list in state
+    state.get_ref().init_defaults().await;
 
     log::info!("Starting MQTT listener in separate thread...");
     let mqtt_state = state.clone();

@@ -28,4 +28,11 @@ impl MqttManager {
             .await
             .map_err(|e| format!("Publish failed: {}", e))
     }
+
+    pub async fn unsubscribe(&self, topic: &str) -> Result<(), String> {
+        self.client
+            .unsubscribe(topic)
+            .await
+            .map_err(|e| format!("Unsubscribe failed: {}", e))
+    }
 }

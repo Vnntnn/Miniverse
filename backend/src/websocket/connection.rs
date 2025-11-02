@@ -4,7 +4,7 @@ use actix_web_actors::ws;
 use std::time::{Duration, Instant};
 
 use crate::events::{ClientCommand, SystemEvent};
-use crate::state::AppState;
+use crate::state::{AppState, Transport};
 use crate::websocket::handler::handle_command;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -13,6 +13,8 @@ const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct WsConnection {
     hb: Instant,
     state: AppState,
+    transport: Transport,
+    is_config: bool,
 }
 
 impl WsConnection {
@@ -20,6 +22,8 @@ impl WsConnection {
         Self {
             hb: Instant::now(),
             state,
+            transport: Transport::Serial,
+            is_config: false,
         }
     }
 
@@ -85,11 +89,53 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConnection {
 
                 match serde_json::from_str::<ClientCommand>(&text) {
                     Ok(cmd) => {
+                        // Intercept session-scoped controls
+                        if let ClientCommand::Command { command } = &cmd {
+                            let lc = command.trim().to_lowercase();
+                            if lc.starts_with("transport ") {
+                                if !self.is_config {
+                                    let err = SystemEvent::Error { source: "command".into(), message: "'transport' is allowed only in CONFIG mode".into() };
+                                    if let Ok(json) = serde_json::to_string(&err) { ctx.text(json); }
+                                    return;
+                                }
+                                let mode = lc.split_whitespace().nth(1).unwrap_or("");
+                                match mode {
+                                    "serial" => {
+                                        self.transport = Transport::Serial;
+                                        let evt = SystemEvent::TransportChanged { transport: "serial".into(), publish_topic: "".into(), subscribe_topics: vec![] };
+                                        if let Ok(json) = serde_json::to_string(&evt) { ctx.text(json); }
+                                        let ok = SystemEvent::Output { content: "Transport: serial".into() };
+                                        if let Ok(json) = serde_json::to_string(&ok) { ctx.text(json); }
+                                    }
+                                    "mqtt" => {
+                                        self.transport = Transport::Mqtt;
+                                        let publish = "miniverse/command".to_string();
+                                        // NOTE: we cannot access config here synchronously; keep default
+                                        let subs = vec!["miniverse/#".to_string()];
+                                        let evt = SystemEvent::TransportChanged { transport: "mqtt".into(), publish_topic: publish, subscribe_topics: subs };
+                                        if let Ok(json) = serde_json::to_string(&evt) { ctx.text(json); }
+                                        let ok = SystemEvent::Output { content: "Transport: mqtt".into() };
+                                        if let Ok(json) = serde_json::to_string(&ok) { ctx.text(json); }
+                                    }
+                                    _ => {
+                                        let out = SystemEvent::Output { content: "Usage: transport <serial|mqtt>".into() };
+                                        if let Ok(json) = serde_json::to_string(&out) { ctx.text(json); }
+                                    }
+                                }
+                                return; // handled here
+                            }
+                        }
+
+                        // Track session mode updates
+                        if let ClientCommand::ChangeMode { mode } = &cmd {
+                            self.is_config = mode.eq_ignore_ascii_case("config");
+                        }
+
                         let state = self.state.clone();
                         let addr = ctx.address();
-
+                        let transport = self.transport;
                         actix::spawn(async move {
-                            let response = handle_command(cmd, &state).await;
+                            let response = handle_command(cmd, &state, Some(transport)).await;
                             if let Ok(json) = serde_json::to_string(&response) {
                                 addr.do_send(SendMessage(json));
                             }

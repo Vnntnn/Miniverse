@@ -99,7 +99,8 @@ export class TerminalManager {
   private handleEvent(e: SystemEvent) {
     switch (e.type) {
       case 'connected':
-        this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Connected to Miniverse Backend`);
+        this.writeln('');
+        this.writeln(`\x1b[38;2;0;200;0m[OK]\x1b[0m Connected to Miniverse Backend`);
         this.prompt();
         break;
         
@@ -108,46 +109,61 @@ export class TerminalManager {
         if (e.connected && e.port && e.board_name) {
           this.serialPort = e.port;
           this.boardName = e.board_name;
-          this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Serial: ${e.port} - ${e.board_name} @ ${e.baud_rate} baud`);
+          this.writeln('');
+          this.writeln(`\x1b[38;2;0;200;0m[OK]\x1b[0m Serial: ${e.port} - ${e.board_name} @ ${e.baud_rate} baud`);
         } else {
           this.serialPort = '';
           this.boardName = '';
-          this.writeln(`\n\x1b[31m[ERR]\x1b[0m Serial disconnected`);
+          this.writeln('');
+          this.writeln(`\x1b[31m[ERR]\x1b[0m Serial disconnected`);
         }
+        // Force a fresh prompt after async status lines may have printed below an older prompt
+        this.pendingPrompt = false;
         this.prompt();
         break;
         
       case 'sensor_info':
-        this.sensors = e.sensors;
-        this.writeln('\nConnected Sensors:');
+  this.sensors = e.sensors;
+  this.writeln('');
+  this.writeln('Connected Sensors:');
         e.sensors.forEach(s => {
           this.writeln(`  [${s.id}] ${s.name} (${s.pin})`);
         });
-        this.writeln(`\nBoard: ${e.board}`);
+  this.writeln(``);
+  this.writeln(`Board: ${e.board}`);
         this.writeln(`Firmware: ${e.firmware}`);
         this.prompt();
         break;
         
       case 'output':
-        this.writeln(`\n${e.content}`);
+  this.writeln('');
+  this.writeln(`${e.content}`);
+        this.pendingPrompt = false;
         this.prompt();
         break;
         
       case 'error':
-        this.writeln(`\n\x1b[31m[ERR]\x1b[0m ERROR [${e.source}]: ${e.message}`);
+  this.writeln('');
+  this.writeln(`\x1b[31m[ERR]\x1b[0m ERROR [${e.source}]: ${e.message}`);
+        this.pendingPrompt = false;
         this.prompt();
         break;
         
       case 'mode_changed':
-        this.mode = e.mode as Mode;
-        this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Mode: ${e.mode}`);
+  this.mode = e.mode as Mode;
+  this.writeln('');
+  this.writeln(`\x1b[38;2;0;200;0m[OK]\x1b[0m Mode: ${e.mode}`);
         // Immediately refresh prompt on mode change
         this.pendingPrompt = false;
         this.prompt();
         break;
         
       case 'mqtt_message':
-        this.writeln(`\n\x1b[38;2;0;180;200m[MQTT]\x1b[0m ${e.topic}: ${e.payload}`);
+  this.writeln('');
+  this.writeln(`\x1b[38;2;0;180;200m[MQTT]\x1b[0m ${e.topic}: ${e.payload}`);
+        // Ensure the prompt is visible after async MQTT output arrives
+        this.pendingPrompt = false;
+        this.prompt();
         break;
     }
   }
@@ -174,6 +190,15 @@ export class TerminalManager {
 
     if (trimmed === 'help') {
       this.showHelp();
+      this.prompt();
+      return;
+    }
+
+    // Guard: transport commands allowed only in config mode
+    if (trimmed.toLowerCase().startsWith('transport ')
+        && this.mode !== 'config') {
+      this.writeln('');
+      this.writeln('\x1b[31m[ERR]\x1b[0m transport is available only in CONFIG mode. Type `config` first.');
       this.prompt();
       return;
     }
@@ -233,13 +258,20 @@ export class TerminalManager {
 
   private prompt() {
     if (this.pendingPrompt) return;
-    this.term.write(`\n${this.getPromptText()}`);
+    // Always move to a new line and reset column to avoid creeping indents
+    this.term.write(`\r\n`);
+    this.term.write(this.getPromptText());
     this.pendingPrompt = true;
+    // ensure latest line is visible
+    try { this.term.scrollToBottom(); } catch {}
   }
 
   private writeln(text: string) {
-    // Ensure multi-line strings render as individual lines
-    text.split(/\r?\n/).forEach(line => this.term.writeln(line));
+    // Normalize CR/LF and render each line distinctly
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    normalized.split(/\n/).forEach(line => this.term.writeln(line));
+    // keep view pinned to the latest output
+    try { this.term.scrollToBottom(); } catch {}
   }
 
   private showWelcome() {
@@ -291,6 +323,7 @@ export class TerminalManager {
     this.writeln('  connect <n> [baud]     - Connect to port');
     this.writeln('  disconnect             - Disconnect serial');
     this.writeln('  status                 - Show status');
+    this.writeln('  transport serial|mqtt  - Select routing (CONFIG only)');
     this.writeln('');
     this.writeln('Normal Mode:');
     this.writeln('  temp                   - Read temperature');
@@ -305,10 +338,8 @@ export class TerminalManager {
     this.writeln('');
     this.writeln('MQTT:');
     this.writeln('  mqtt sub <topic>');
+    this.writeln('  mqtt unsub <topic>');
     this.writeln('  mqtt pub <topic> <payload>');
-    this.writeln('');
-    this.writeln('Transport:');
-    this.writeln('  transport serial | transport mqtt');
     this.writeln('');
   }
 
