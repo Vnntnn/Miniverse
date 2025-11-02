@@ -40,7 +40,6 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn from_env() -> Self {
-        Self::default()
-    }
+    #[allow(dead_code)]
+    pub fn from_env() -> Self { Self::default() }
 }

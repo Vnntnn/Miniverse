@@ -2,6 +2,7 @@ use crate::events::{SystemEvent, SensorDetail};
 use crate::state::{AppState, Transport};
 use crate::serial::SerialBridge;
 
+#[allow(dead_code)]
 pub async fn handle_serial_command(cmd: &str, state: &AppState) -> SystemEvent {
     handle_serial_command_with_transport(cmd, state, None).await
 }
@@ -438,14 +439,13 @@ async fn handle_info(state: &AppState) -> SystemEvent {
         }
     }
     let serial = state.serial.read().await;
-    
+
     if !serial.is_connected() {
         return SystemEvent::Error {
             source: "serial".to_string(),
             message: "Not connected to board".to_string(),
         };
     }
-    
     // Forward to firmware: try 'INFO' first
     if let Err(e) = serial.send_command("INFO") {
         return SystemEvent::Error {
@@ -453,66 +453,49 @@ async fn handle_info(state: &AppState) -> SystemEvent {
             message: format!("Failed to send INFO: {}", e),
         };
     }
-    // Read response (format: SENSORS:DHT22:2,LED:13,PIR:7)
-    match serial.read_line(2000) {
-        Ok(response) if response.starts_with("SENSORS:") => {
-            let sensor_data = response.strip_prefix("SENSORS:").unwrap_or("");
-            let sensors: Vec<SensorDetail> = sensor_data
-                .split(',')
-                .enumerate()
-                .filter_map(|(i, s)| {
-                    let parts: Vec<&str> = s.split(':').collect();
-                    if parts.len() == 2 {
-                        Some(SensorDetail {
-                            id: (i + 1) as u8,
-                            name: parts[0].to_string(),
-                            pin: format!("Pin {}", parts[1]),
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            
-            SystemEvent::SensorInfo {
-                sensors,
-                board: serial.get_board_name().unwrap_or("Unknown").to_string(),
-                firmware: "v1.0.0".to_string(),
-            }
-        }
-        Ok(response) => SystemEvent::Error {
-            source: "serial".to_string(),
-            message: format!("Invalid response: {}", response),
-        },
-        Err(_) => {
-            // Try again using alias '/INFO' and longer timeout
-            let _ = serial.send_command("/INFO");
-            match serial.read_line(3000) {
-                Ok(resp) if resp.starts_with("SENSORS:") => {
-                    let sensor_data = resp.strip_prefix("SENSORS:").unwrap_or("");
-                    let sensors: Vec<SensorDetail> = sensor_data
+
+    // Read multiple lines for up to ~3s, accept SENSORS line wherever it appears
+    let mut sensors: Option<Vec<SensorDetail>> = None;
+    let mut attempts = 0;
+    let start = std::time::Instant::now();
+    while start.elapsed().as_millis() < 3000 {
+        match serial.read_line(400) {
+            Ok(line) => {
+                let line = line.trim();
+                if line.starts_with("SENSORS:") {
+                    let sensor_data = line.strip_prefix("SENSORS:").unwrap_or("");
+                    let s: Vec<SensorDetail> = sensor_data
                         .split(',')
                         .enumerate()
-                        .filter_map(|(i, s)| {
-                            let parts: Vec<&str> = s.split(':').collect();
-                            if parts.len() == 2 {
-                                Some(SensorDetail {
-                                    id: (i + 1) as u8,
-                                    name: parts[0].to_string(),
-                                    pin: format!("Pin {}", parts[1]),
-                                })
+                        .filter_map(|(i, part)| {
+                            let kv: Vec<&str> = part.split(':').collect();
+                            if kv.len() == 2 {
+                                Some(SensorDetail { id: (i+1) as u8, name: kv[0].trim().to_string(), pin: format!("Pin {}", kv[1].trim()) })
                             } else { None }
                         })
                         .collect();
-                    SystemEvent::SensorInfo {
-                        sensors,
-                        board: serial.get_board_name().unwrap_or("Unknown").to_string(),
-                        firmware: "v1.0.0".to_string(),
-                    }
+                    sensors = Some(s);
+                    break;
                 }
-                _ => SystemEvent::Output { content: "No sensor info returned from board (timeout). If sensors aren't connected, that's ok. Use 'status' or try commands like 'light on' or 'temp'.".to_string() },
+                // Ignore other banner lines
             }
-        },
+            Err(_) => {
+                attempts += 1;
+                if attempts == 2 {
+                    let _ = serial.send_command("/INFO");
+                }
+            }
+        }
+    }
+
+    if let Some(sensors) = sensors {
+        SystemEvent::SensorInfo {
+            sensors,
+            board: serial.get_board_name().unwrap_or("Unknown").to_string(),
+            firmware: "v1.0.0".to_string(),
+        }
+    } else {
+        SystemEvent::Output { content: "No sensor info returned from board (timeout). If sensors aren't connected, that's ok. Use 'status' or try commands like 'light on' or 'temp'.".to_string() }
     }
 }
 

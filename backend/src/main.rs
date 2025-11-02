@@ -9,7 +9,7 @@ mod state;
 mod websocket;
 
 use config::Config;
-use events::SystemEvent;
+use events::{SystemEvent, SensorDetail};
 use mqtt::MqttManager;
 use serial::SerialBridge;
 use state::AppState;
@@ -47,10 +47,39 @@ async fn main() -> std::io::Result<()> {
                     let topic = p.topic.clone();
                     let payload = String::from_utf8_lossy(&p.payload).to_string();
 
-                    mqtt_state.broadcast(SystemEvent::MqttMessage {
-                        topic,
-                        payload,
-                    });
+                    // Parse info/state into structured event
+                    if let Some(caps) = topic.strip_prefix("miniverse/") {
+                        let parts: Vec<&str> = caps.split('/').collect();
+                        if parts.len() >= 3 && parts[1] == "info" && parts[2] == "state" {
+                            // Expected payload format:
+                            //   SENSORS:TYPE:PIN,TYPE:PIN;BOARD:Name;FIRMWARE:Ver
+                            let mut board = String::from("Unknown");
+                            let mut firmware = String::from("Unknown");
+                            let mut sensors: Vec<SensorDetail> = Vec::new();
+                            for seg in payload.split(';') {
+                                if let Some(s) = seg.strip_prefix("SENSORS:") {
+                                    for (i, sp) in s.split(',').enumerate() {
+                                        let kv: Vec<&str> = sp.split(':').collect();
+                                        if kv.len() == 2 {
+                                            sensors.push(SensorDetail {
+                                                id: (i + 1) as u8,
+                                                name: kv[0].trim().to_string(),
+                                                pin: format!("Pin {}", kv[1].trim()),
+                                            });
+                                        }
+                                    }
+                                } else if let Some(b) = seg.strip_prefix("BOARD:") {
+                                    board = b.trim().to_string();
+                                } else if let Some(f) = seg.strip_prefix("FIRMWARE:") {
+                                    firmware = f.trim().to_string();
+                                }
+                            }
+                            mqtt_state.broadcast(SystemEvent::SensorInfo { sensors, board, firmware });
+                            continue;
+                        }
+                    }
+
+                    mqtt_state.broadcast(SystemEvent::MqttMessage { topic, payload });
                 }
                 Ok(_) => {}
                 Err(e) => {

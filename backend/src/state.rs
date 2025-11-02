@@ -4,7 +4,6 @@ use crate::mqtt::MqttManager;
 use crate::serial::SerialBridge;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport {
