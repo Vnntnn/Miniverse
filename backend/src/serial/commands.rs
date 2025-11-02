@@ -34,8 +34,9 @@ pub async fn handle_serial_command_with_transport(
         // Device commands (Normal mode)
         "temp" => exec_temp(&parts[1..], state, transport_override).await,
         "distance" => exec_distance(&parts[1..], state, transport_override).await,
-        "set" => exec_set(&parts[1..], state, transport_override).await,
-        "light" => exec_light(&parts[1..], state, transport_override).await,
+    "set" => exec_set(&parts[1..], state, transport_override).await,
+    // accept both 'light' and 'led' as aliases
+    "light" | "led" => exec_light(&parts[1..], state, transport_override).await,
         "lcd" => exec_lcd(&parts[1..], state, transport_override).await,
         // Reject unknowns explicitly
         _ => SystemEvent::Error { source: "cli".to_string(), message: "Unknown command. Type 'help' for available commands.".to_string() },

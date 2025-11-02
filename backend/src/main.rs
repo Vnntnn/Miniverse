@@ -1,5 +1,6 @@
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer};
+use actix_files::Files;
+use actix_web::{web, App, HttpResponse, HttpServer};
 
 mod config;
 mod events;
@@ -106,9 +107,18 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(state.clone())
             .route("/ws", web::get().to(websocket::ws_route))
+            .route("/api/ports", web::get().to(api_ports))
             .route("/health", web::get().to(|| async { "OK" }))
+            .service(Files::new("/", "../frontend/dist").index_file("index.html"))
     })
     .bind((host.as_str(), port))?
     .run()
     .await
+}
+
+async fn api_ports() -> HttpResponse {
+    match SerialBridge::list_ports() {
+        Ok(ports) => HttpResponse::Ok().json(ports),
+        Err(e) => HttpResponse::InternalServerError().json(format!("Error: {}", e)),
+    }
 }

@@ -26,6 +26,7 @@ PubSubClient client(netClient);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 bool ledState = false;
+unsigned long lastMqttAttempt = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -228,6 +229,7 @@ void handleCommand(String cmd) {
     String topic = String("miniverse/") + BOARD_ID + "/lcd/state";
     String payload = String("LCD:") + l1 + (l2.length()?String("|")+l2:"");
     client.publish(topic.c_str(), payload.c_str());
+    Serial.println("OK");
   }
   
   // System Info
@@ -241,10 +243,10 @@ void handleCommand(String cmd) {
     client.publish(topic.c_str(), "SENSORS:HC-SR04:7-6,LED:5,LCD:0x27;BOARD:Arduino UNO R4 WiFi;FIRMWARE:1.0.1");
   }
   else if (up == "/HELP" || up == "HELP") {
-    Serial.println("CMDS: TEMP, LIGHT ON|OFF|TOGGLE, SET LIGHT <0-255>, /INFO, /VERSION, /ABOUT");
+    Serial.println("CMDS: TEMP, DISTANCE, LIGHT ON|OFF|TOGGLE, SET LIGHT <0-255>, LCD CLEAR, LCD SHOW \"a\" [\"b\"], INFO, VERSION, ABOUT");
   }
   else if (up == "/VERSION" || up == "VERSION") {
-    Serial.println("VERSION:1.0.0");
+    Serial.println("VERSION:1.0.1");
   }
   else if (up == "/ABOUT" || up == "ABOUT") {
     Serial.println("ABOUT:Miniverse Arduino Firmware");
@@ -257,30 +259,27 @@ void handleCommand(String cmd) {
   }
 }
 
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Connecting to MQTT...");
-    
-    if (client.connect("MiniverseArduino")) {
-      Serial.println("connected");
-  // Subscribe to per-component command topics: miniverse/<board>/<component>/command
-  client.subscribe("miniverse/+/+/command");
-  String myCmds = String("miniverse/") + BOARD_ID + "/+/command";
-  client.subscribe(myCmds.c_str());
-  client.subscribe("miniverse/command"); // legacy
-      client.publish("miniverse/status", "Arduino connected");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.println(client.state());
-      delay(5000);
-    }
+void mqttEnsureConnected() {
+  if (client.connected()) return;
+  unsigned long now = millis();
+  if (now - lastMqttAttempt < 3000) return; // throttle attempts
+  lastMqttAttempt = now;
+  Serial.print("Connecting to MQTT...");
+  if (client.connect("MiniverseArduino")) {
+    Serial.println("connected");
+    client.subscribe("miniverse/+/+/command");
+    String myCmds = String("miniverse/") + BOARD_ID + "/+/command";
+    client.subscribe(myCmds.c_str());
+    client.subscribe("miniverse/command"); // legacy
+    client.publish("miniverse/status", "Arduino connected");
+  } else {
+    Serial.print("failed, rc=");
+    Serial.println(client.state());
   }
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();
-  }
+  mqttEnsureConnected();
   client.loop();
   
   // Handle serial commands

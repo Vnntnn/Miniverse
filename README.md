@@ -46,23 +46,18 @@ Firmware publishes telemetry and acknowledgements on `.../state`. The UI include
 
 Normal mode:
 
-- `temp <C|F|K>` – read temperature
-- `distance [id]` – read distance
-- `light on | light off` – LED shortcut full/zero
-- `set light <0-255> [color]` – set LED brightness/color
-- `lcd clear` – clear LCD
-- `lcd show "a" ["b"]` – show 1–2 lines on LCD (quotes required)
-- `info | about | version`
 
 Config mode:
 
-- `ports` – list serial ports
-- `connect <n> [baud]`, `disconnect`, `status`
-- `transport serial|mqtt`
-- `mqtt sub <topic>`, `mqtt unsub <topic>`, `mqtt subs` (list current subscriptions)
 
 Tips:
 
-- The terminal blocks unknown commands on the client side and the backend validates again.
-- In MQTT transport, `info` publishes to `miniverse/<board>/info/command` and expects the firmware to reply on `.../info/state`.
+
+From repository root you can run the full stack with one command (broker + backend + frontend):
+
+```bash
+npm run dev:all
+```
+
+Or run just frontend and backend concurrently (assumes you started the broker yourself):
 

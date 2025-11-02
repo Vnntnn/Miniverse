@@ -1,4 +1,5 @@
 use serialport::{SerialPort, SerialPortType, UsbPortInfo};
+use serde::Serialize;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -175,7 +176,7 @@ impl SerialBridge {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PortInfo {
     pub index: usize,
     pub port_name: String,

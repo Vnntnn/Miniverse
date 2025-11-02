@@ -16,6 +16,7 @@ export class TerminalManager {
   private boardName = '';
   private sensors: SensorDetail[] = [];
   private pendingPrompt = false;
+  private transport: 'serial' | 'mqtt' = 'serial';
 
   constructor(container: HTMLElement) {
     this.term = new Terminal({
@@ -28,7 +29,7 @@ export class TerminalManager {
         background: '#0D0F14',
         foreground: '#C8D1E1',
         cursor: '#C8D1E1',
-        selection: '#283042',
+        selectionBackground: '#283042',
       },
       rows: 30,
       // Let FitAddon determine columns based on container size
@@ -163,14 +164,22 @@ export class TerminalManager {
         this.prompt();
         break;
         
-      case 'mode_changed':
-  this.mode = e.mode as Mode;
-  this.writeln('');
-  this.writeln(`\x1b[38;2;0;200;0m[OK]\x1b[0m Mode: ${e.mode}`);
+      case 'mode_changed': {
+        const ev = e as any;
+        this.mode = ev.mode as Mode;
+        this.writeln('');
+        this.writeln(`\x1b[38;2;0;200;0m[OK]\x1b[0m Mode: ${ev.mode}`);
         // Immediately refresh prompt on mode change
         this.pendingPrompt = false;
         this.prompt();
         break;
+      }
+      case 'transport_changed': {
+        const ev = e as any;
+        this.transport = (ev.transport || 'serial').toLowerCase() as any;
+        // no direct output here; UI bar handles visuals via Terminal.astro
+        break;
+      }
         
       case 'mqtt_message':
   this.writeln('');
@@ -246,7 +255,7 @@ export class TerminalManager {
     // Provide guidance if user tries Arduino commands without a serial connection
     const looksArduino = ['temp','distance','light','set','lcd']
       .some(k => trimmed.startsWith(k));
-    if (looksArduino && !this.serialConnected) {
+    if (looksArduino && this.transport === 'serial' && !this.serialConnected) {
       this.writeln('\n[ERR] Serial not connected. Use "config" -> "ports" -> "connect <n> [baud]".');
       this.prompt();
       return;
@@ -279,6 +288,7 @@ export class TerminalManager {
       low === 'distance' || low.startsWith('distance ') ||
       low.startsWith('set light ') ||
       low === 'light on' || low === 'light off' ||
+      low === 'led on' || low === 'led off' ||
       low === 'lcd clear' || low.startsWith('lcd show ')
     );
     if (m === 'normal' && isNormal) return true;

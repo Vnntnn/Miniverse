@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:all": "concurrently -n broker,backend,frontend -c \"yellow.bold,cyan.bold,green.bold\" \"npm run dev:broker\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:broker": "mosquitto -c mqtt_broker/config/mosquitto.conf -v",
     "dev:backend": "cd backend && cargo run",
     "dev:frontend": "cd frontend && npm run dev",
     "build": "npm run build:frontend", 
