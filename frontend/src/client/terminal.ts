@@ -387,7 +387,7 @@ export class TerminalManager {
   this.writeln('  mqtt subs              - List current subscriptions');
     this.writeln('');
     this.writeln('Normal Mode:');
-    this.writeln('  temp <C|F|K>           - Read temperature');
+  this.writeln('  temp                   - Read temperature (unit chosen by firmware)');
     this.writeln('  distance [id]          - Read distance');
     this.writeln('  light on | light off   - LED shortcut full/zero');
     this.writeln('  set light <0-255> [color] - Set LED brightness');

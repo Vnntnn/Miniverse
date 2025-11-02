@@ -48,7 +48,7 @@ fn backend_help_text() -> String {
     s.push_str("| System                 | help, clear, config, normal/exit       |\n");
     s.push_str("| Serial (config mode)   | ports, connect <n> [baud],             |\n");
     s.push_str("|                        | disconnect, status                     |\n");
-    s.push_str("| Device (normal mode)   | temp <C|F|K>, distance [id]            |\n");
+    s.push_str("| Device (normal mode)   | temp, distance [id]                   |\n");
     s.push_str("| LED                    | light on/off, set light <0-255> [color]|\n");
     s.push_str("| LCD                    | lcd clear, lcd show \"a\" [\"b\"]     |\n");
     s.push_str("| Firmware Meta          | help, version, about, info             |\n");
@@ -205,15 +205,9 @@ fn component_topic_sync(serial: &crate::serial::SerialBridge, component: &str) -
     format!("miniverse/{}/{}/command", bid, component)
 }
 
-async fn exec_temp(args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
-    // Validate optional unit
-    let unit = args.get(0).map(|u| u.to_ascii_uppercase());
-    if let Some(u) = &unit {
-        if u != "C" && u != "F" && u != "K" {
-            return SystemEvent::Error { source: "cli".into(), message: "Usage: temp <C|F|K>".into() };
-        }
-    }
-    let payload = match unit { Some(u) => format!("temp {}", u), None => "temp".to_string() };
+async fn exec_temp(_args: &[&str], state: &AppState, transport_override: Option<Transport>) -> SystemEvent {
+    // Firmware chooses/display unit; send bare 'temp'
+    let payload = "temp".to_string();
     match transport_override.unwrap_or(*state.transport.read().await) {
         Transport::Serial => forward_to_arduino(&payload, state).await,
         Transport::Mqtt => {
@@ -521,7 +515,7 @@ async fn handle_info(state: &AppState) -> SystemEvent {
         SystemEvent::SensorInfo {
             sensors,
             board: serial.get_board_name().unwrap_or("Unknown").to_string(),
-            firmware: "v1.0.0".to_string(),
+            firmware: "v1.0.1".to_string(),
         }
     } else {
         SystemEvent::Output { content: "No sensor info returned from board (timeout). If sensors aren't connected, that's ok. Use 'status' or try commands like 'light on' or 'temp'.".to_string() }

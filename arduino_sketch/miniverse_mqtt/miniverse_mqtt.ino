@@ -5,8 +5,8 @@
 #include <LiquidCrystal_I2C.h>
 
 // WiFi Configuration
-const char* ssid = "rujihouse";
-const char* password = "0969296176";
+const char* ssid = "Vnntnn";
+const char* password = "thanabodee11014@";
 
 // MQTT Configuration
 const char* mqtt_server = "192.168.1.100";  // TODO: set to your broker IP
@@ -17,8 +17,8 @@ const char* BOARD_ID   = "arduino_uno_wifi_r4";  // Board identifier used in top
 #define DHTPIN 2
 #define DHTTYPE DHT22
 #define LED_PIN 5
-#define TRIG_PIN 9
-#define ECHO_PIN 8
+#define TRIG_PIN 7
+#define ECHO_PIN 6
 
 DHT dht(DHTPIN, DHTTYPE);
 WiFiClient netClient;
@@ -134,16 +134,28 @@ void handleCommand(String cmd) {
   }
   
   // Sensor Readings
-  else if (up == "READ_TEMP" || up == "TEMP") {
-    float temp = dht.readTemperature();
-    if (!isnan(temp)) {
+  else if (up.startsWith("TEMP")) {
+    // Optional unit: C, F, or K (default C). Accepts payloads like "temp", "temp C", "temp F".
+    char unit = 'C';
+    int sp = up.indexOf(' ');
+    if (sp > 0 && sp + 1 < (int)up.length()) {
+      char u = up.charAt(sp + 1);
+      if (u == 'C' || u == 'F' || u == 'K') unit = u;
+    }
+    float tC = dht.readTemperature();
+    if (!isnan(tC)) {
+      float val = tC;
+      if (unit == 'F') val = tC * 1.8f + 32.0f;
+      else if (unit == 'K') val = tC + 273.15f;
       char buf[32];
-      sprintf(buf, "TEMP:%.1fC", temp);
+      snprintf(buf, sizeof(buf), "TEMP:%.1f%c", val, unit);
       Serial.println(buf);
       String topic = String("miniverse/") + BOARD_ID + "/temp/state";
       client.publish(topic.c_str(), buf);
     } else {
-      Serial.println("ERROR: Failed to read temperature");
+      Serial.println("ERROR: No temperature sensor");
+      String topic = String("miniverse/") + BOARD_ID + "/temp/state";
+      client.publish(topic.c_str(), "ERROR:NO_TEMP_SENSOR");
     }
   }
   else if (up == "DISTANCE" || up.startsWith("DISTANCE ")) {
@@ -221,12 +233,12 @@ void handleCommand(String cmd) {
   // System Info
   else if (up == "INFO" || up == "/INFO") {
     // Print to serial for legacy behavior
-    Serial.println("SENSORS:DHT22:2,LED:13");
+    Serial.println("SENSORS:HC-SR04:7-6,LED:5,LCD:0x27");
     Serial.println("BOARD:Arduino UNO R4 WiFi");
-    Serial.println("FIRMWARE:1.0.0");
+    Serial.println("FIRMWARE:1.0.1");
     // Also publish a compact info over MQTT
     String topic = String("miniverse/") + BOARD_ID + "/info/state";
-    client.publish(topic.c_str(), "SENSORS:DHT22:2,LED:13;BOARD:Arduino UNO R4 WiFi;FIRMWARE:1.0.0");
+    client.publish(topic.c_str(), "SENSORS:HC-SR04:7-6,LED:5,LCD:0x27;BOARD:Arduino UNO R4 WiFi;FIRMWARE:1.0.1");
   }
   else if (up == "/HELP" || up == "HELP") {
     Serial.println("CMDS: TEMP, LIGHT ON|OFF|TOGGLE, SET LIGHT <0-255>, /INFO, /VERSION, /ABOUT");

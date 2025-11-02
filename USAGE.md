@@ -1,4 +1,4 @@
-# 🌌 MINIVERSE - Complete Usage Guide v3.1
+# 🌌 MINIVERSE - Usage Guide (UNO R4 WiFi)
 
 ## 🎯 Two-Mode Terminal System
 
@@ -45,7 +45,7 @@
 
 6. **Check sensors:**
    ```
-   Miniverse(Config)#> /info
+   Miniverse(Config)#> info
    ```
 
 7. **Control devices (Serial):**
@@ -55,10 +55,12 @@
    Miniverse(Config)#> set light 128
    ```
 
-8. **Or control via MQTT:**
+8. **Or control via MQTT (per-component topics):**
    ```
+   Miniverse(Normal)> mqtt subs
    Miniverse(Normal)> mqtt sub miniverse/#
-   Miniverse(Normal)> mqtt pub miniverse/command "light on"
+   # Example publish (will be sent by backend normally):
+   Miniverse(Normal)> mqtt pub miniverse/arduino_uno_wifi_r4/led/command "set light 128"
    ```
 
 ---
@@ -82,39 +84,45 @@
 | `status` | Show connection status |
 | `./info` | Display connected sensors |
 
-### Arduino Control (Config Mode, Serial)
+### Arduino Control (Normal Mode)
 | Command | Description |
 |---------|-------------|
-| `temp` | Read temperature |
+| `temp` | Read temperature (unit chosen by firmware) |
 | `light on` | Turn LED on |
 | `light off` | Turn LED off |
 | `light toggle` | Toggle LED state |
 | `set light <0-255>` | Set LED brightness (PWM) |
-| `/info` | Display sensors/board/firmware |
-| `/help`, `/version`, `/about` | Firmware info |
+| `lcd clear` | Clear LCD |
+| `lcd show "a" ["b"]` | Show text on LCD (16x2) |
+| `distance` | Read distance from HC‑SR04 |
+| `info` | Display sensors/board/firmware |
+| `version`, `about` | Firmware meta |
 
 ### MQTT Commands (Both Modes)
 | Command | Description |
 |---------|-------------|
 | `mqtt sub <topic>` | Subscribe to topic |
+| `mqtt unsub <topic>` | Unsubscribe from topic |
+| `mqtt subs` | List current subscriptions |
 | `mqtt pub <topic> <payload>` | Publish a payload |
 
 ---
 
 ## 🔌 Hardware Setup
 
-### Wiring Example:
+### Wiring (Arduino UNO R4 WiFi)
 
 ```
-Arduino Uno WiFi Rev2
-┌─────────────────┐
-│                 │
-│  Pin 2  ─────► DHT22 (Data)
-│  Pin 13 ─────► LED (Anode)
-│  5V     ─────► DHT22 (VCC)
-│  GND    ─────► DHT22 (GND) + LED (Cathode)
-│                 │
-└─────────────────┘
+UNO R4 WiFi
+┌──────────────────────────────┐
+│                              │
+│  Pin 5   ─────► LED (PWM)
+│  Pin 7   ─────► HC‑SR04 TRIG
+│  Pin 6   ─────► HC‑SR04 ECHO
+│  I2C 0x27 ───► 16x2 LCD (SDA/SCL)
+│  5V/GND  ───► Sensors Power/GND
+│                              │
+└──────────────────────────────┘
 ```
 
 ---
@@ -138,17 +146,24 @@ Miniverse(Config)#> connect 0 115200
 
 Miniverse(Config)#> /info
 Connected Sensors:
-  [1] DHT22 (Pin 2)
-  [2] LED (Pin 13)
+   [1] HC-SR04 (Pin 7-6)
+   [2] LED (Pin 5)
+   [3] LCD (0x27)
 
-Board: Arduino Uno WiFi Rev2
-Firmware: v1.0.0
+Board: Arduino UNO R4 WiFi
+Firmware: v1.0.1
 
 Miniverse(Config)#> light on
 OK
 
-Miniverse(Config)#> temp
-TEMP:25.3C
+Miniverse(Config)#> distance
+DIST:42.1cm
+
+Miniverse(Config)#> set light 128
+OK
+
+Miniverse(Config)#> lcd show "Hello" "World"
+LCD:Hello|World
 
 Miniverse(Config)#> exit
 ✓ Mode: normal
