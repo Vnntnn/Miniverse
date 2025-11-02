@@ -47,7 +47,7 @@ async fn handle_ports() -> SystemEvent {
             
             for p in ports {
                 // Single line format: [index] port (device)
-                output.push_str(&format!(" [{}] {} ({})\n", p.index, p.port_name, p.board_name));
+                output.push_str(&format!("[{}] {} ({})\n", p.index, p.port_name, p.board_name));
             }
             
             output.push_str("\nconnect <index> [baud]\n");

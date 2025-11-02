@@ -31,7 +31,7 @@ export class TerminalManager {
         selection: '#283042',
       },
       rows: 30,
-      cols: 120, // Increased from 100 to prevent wrapping
+      // Let FitAddon determine columns based on container size
     });
 
     this.fitAddon = new FitAddon();
@@ -66,7 +66,7 @@ export class TerminalManager {
       } else if (code === 3) {
         this.term.write('^C');
         this.currentLine = '';
-        this.term.writeln('');
+        this.writeln('');
         this.prompt();
       // Tab => autocomplete from history (latest match)
       } else if (code === 9) {
@@ -155,7 +155,7 @@ export class TerminalManager {
       return;
     }
 
-    this.term.writeln('');
+    this.writeln('');
     this.history.push(trimmed);
     this.historyIndex = this.history.length;
 
@@ -234,29 +234,40 @@ export class TerminalManager {
   }
 
   private writeln(text: string) {
-    this.term.writeln(text);
+    // Ensure multi-line strings render as individual lines
+    text.split(/\r?\n/).forEach(line => this.term.writeln(line));
   }
 
   private showWelcome() {
-    // Ultra-simple banner - no special characters that break rendering
-    const banner = [
+    // Dynamic ASCII banner sized to terminal columns (capped for readability)
+    const cols = Math.max(20, Math.min(this.term.cols, 60));
+    const border = '='.repeat(cols);
+    const blank = '|' + ' '.repeat(cols - 2) + '|';
+    const centerLine = (text: string) => {
+      const pad = cols - 2 - text.length;
+      const left = Math.floor(pad / 2);
+      const right = pad - left;
+      return '|' + ' '.repeat(left) + text + ' '.repeat(right) + '|';
+    };
+
+    const lines = [
       '',
-      '  ========================================',
-      '  |                                      |',
-      '  |       M I N I V E R S E              |',
-      '  |                                      |',
-      '  |    Discovery Terminal v1.0           |',
-      '  |                                      |',
-      '  ========================================',
+      '  ' + border,
+      '  ' + blank,
+      '  ' + centerLine('MINIVERSE'),
+      '  ' + blank,
+      '  ' + centerLine('Discovery Terminal v1.0'),
+      '  ' + blank,
+      '  ' + border,
       '',
       '  Physical Computing & IoT Control System',
       '  Arduino Interface Terminal',
       '',
       '  Commands: help | config | normal',
       ''
-    ].join('\n');
+    ];
 
-    this.writeln(banner);
+    lines.forEach(l => this.term.writeln(l));
     this.prompt();
   }
 
