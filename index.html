@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniVerse Console</title>
+  <style>
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ✅ Navigation Bar */
+  .navbar {
+    width: 100%;
+    background-color: #111;
+    box-shadow: 0 0 10px #00ff66;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    box-sizing: border-box;
+  }
+
+  .navbar .logo {
+    color: #00ff66;
+    font-weight: bold;
+    font-size: 22px;
+    text-shadow: 0 0 8px #00ff66;
+    white-space: nowrap;
+  }
+
+  .navbar .nav-links {
+    display: flex;
+    gap: 15px;
+    flex-shrink: 0;
+  }
+
+  .navbar a {
+    color: #00ff66;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 16px;
+    transition: 0.3s;
+    white-space: nowrap;
+  }
+
+  .navbar a:hover {
+    color: #fff;
+    text-shadow: 0 0 8px #00ff66;
+  }
+
+
+    .navbar a:hover {
+      color: #fff;
+      text-shadow: 0 0 8px #00ff66;
+    }
+
+    h1 {
+      color: #00ff66;
+      font-size: 3rem;
+      text-shadow: 2px 2px #003300;
+      margin-top: 100px; /* ✅ เว้นจาก navbar */
+      margin-bottom: 0;
+    }
+
+    .desc {
+      font-size: 14px;
+      color: #ccc;
+      margin: 10px 0 20px;
+      max-width: 700px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .console {
+      width: 90%;
+      max-width: 900px;
+      background: #2b2b2b;
+      border-radius: 10px;
+      padding: 15px;
+      height: 400px;
+      overflow-y: auto;
+      box-sizing: border-box;
+      font-size: 14px;
+      line-height: 1.6;
+      box-shadow: 0 0 10px #00ff66;
+    }
+
+    .input-box {
+      width: 90%;
+      max-width: 900px;
+      background: #222;
+      border-radius: 25px;
+      padding: 10px 20px;
+      margin-top: 15px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 0 8px #00ff66;
+    }
+
+    .prompt {
+      color: #00ff66;
+      margin-right: 10px;
+      font-weight: bold;
+    }
+
+    input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: white;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      outline: none;
+    }
+
+    .footer {
+      color: #888;
+      font-size: 12px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .help-list {
+      color: #00ff99;
+      margin-left: 15px;
+    }
+
+    .system {
+      color: #00ffaa;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ✅ Navigation Bar -->
+  <div class="navbar">
+    <div class="logo">MiniVerse</div>
+    <div class="nav-links">
+      <a href="index (1).html">Home</a>
+      <a href="info.html">Info</a>
+    </div>
+  </div>
+
+  <h1>MiniVerse</h1>
+  <div class="desc">
+    โครงงานนี้จัดทำขึ้นเพื่อแก้ปัญหาของผู้ที่ต้องการเรียนรู้การใช้งาน Sensor และ Arduino แต่พบอุปสรรคในการทดลอง<br>
+     และอัปโหลดโค้ดบ่อยครั้ง ระบบที่พัฒนาขึ้นช่วยให้ผู้ใช้สามารถทดลองและควบคุม การทำงานของบอร์ดได้แบบเรียลไทม์<br>
+     โดยไม่จำเป็นต้องอัปโหลดโปรแกรมใหม่ทุกครั้ง อีกทั้งยังออกแบบให้ใช้งานง่าย เหมาะสำหรับผู้เริ่มต้น<br>
+     และผู้ที่ต้องการทำความเข้าใจการทำงานของไมโครคอนโทรลเลอร์อย่างเป็นระบบมากขึ้น
+  </div>
+
+  <div class="console" id="console">
+    >> ระบบพร้อมทำงาน<br>
+  </div>
+
+  <div class="input-box">
+    <span class="prompt">>></span>
+    <input type="text" id="message" placeholder="Enter Command ...">
+  </div>
+
+  <div class="footer">
+    source code : https://github.com/worapx/MiniVerse-Project, https://github.com/Vnntnn/Miniverse/tree/develop
+  </div>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script>
+    const client = mqtt.connect('wss://mqtt-dashboard.com:8884/mqtt', {
+      clientId: 'clientId-' + Math.random().toString(16).substr(2, 8)
+    });
+
+    const topic = 'miniverse/command';
+    const consoleEl = document.getElementById('console');
+    const inputEl = document.getElementById('message');
+
+    function logToConsole(msg, isHelp = false, isSystem = false) {
+      const newLine = document.createElement('div');
+      if (isHelp || isSystem) {
+        newLine.className = isHelp ? 'help-list' : 'system';
+        newLine.innerHTML = msg;
+      } else {
+        newLine.textContent = '>> ' + msg;
+      }
+      consoleEl.appendChild(newLine);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    client.on('connect', () => {
+      logToConsole('connect MQTT success ✓', false, true);
+      logToConsole('/help for show all command', false, true);
+    });
+
+    client.on('error', (err) => {
+      logToConsole('error connect MQTT', false, true);
+      console.error(err);
+    });
+
+    client.subscribe(topic);
+
+    client.on('message', (t, message) => {
+      if (t === topic) {
+        logToConsole('system - ' + message.toString());
+      }
+    });
+
+    inputEl.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const msg = inputEl.value.trim();
+        if (!msg) return;
+
+        if (msg === '/help') {
+            logToConsole('command list:', true);
+            logToConsole('/info — show info', true);
+            logToConsole('/help — show all command', true);
+            logToConsole('/version — show version', true);
+            logToConsole('/about — show about Project', true);
+            logToConsole('/clear — clear Console', true);
+            logToConsole('temp — temperature measurement', true);
+            logToConsole('set unit temp <C/K/F> — set unti temperature', true);
+            logToConsole('light <on/off> — LED On/Off', true);
+            logToConsole('set light <int> — LED brightness', true);
+            logToConsole('distance — measure the distance', true);
+            logToConsole('lcd show line "message", "message" — show text LCD', true);
+            logToConsole('lcd clear — clear LCD', true);
+            logToConsole('date — show date', true);
+            logToConsole('time — show time', true);
+            logToConsole('season — show season', true);
+            logToConsole('Text — sent to MQTT Broker', true);
+        } 
+        else if (msg === '/clear') {
+          consoleEl.innerHTML = '>> clear success<br>';
+        }
+        else {
+          client.publish(topic, msg);
+          logToConsole(msg);
+        }
+        inputEl.value = '';
+      }
+    });
+  </script>
+</body>
+</html>
