@@ -21,16 +21,6 @@ const { title, description = "Miniverse Discovery Terminal - Advanced Arduino In
   </head>
   <body class="min-h-screen bg-terminal-bg text-terminal-text">
     <slot />
-    
-    <!-- background effects -->
-    <div class="fixed inset-0 pointer-events-none overflow-hidden">
-      <div class="absolute inset-0 opacity-5" 
-           style="background-image: linear-gradient(rgba(0,255,65,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.1) 1px, transparent 1px); background-size: 50px 50px;">
-      </div>
-      <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-cyber-green/5 rounded-full blur-3xl animate-pulse-slow"></div>
-      <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyber-blue/5 rounded-full blur-3xl animate-pulse-slow delay-1000"></div>
-    </div>
-    
     <style is:global>
       html { background: #0a0a0a; }
       body { font-feature-settings: "rlig" 1, "calt" 1; }

@@ -1,6 +1,11 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+export function formatTimestamp(date: Date): string {
+  return date.toLocaleTimeString();
+}
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+export function parseCommand(input: string): { command: string; args: string[] } {
+  const parts = input.trim().split(/\s+/);
+  return {
+    command: parts[0] || '',
+    args: parts.slice(1)
+  };
 }

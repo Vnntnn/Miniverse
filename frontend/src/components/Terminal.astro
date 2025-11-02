@@ -1,0 +1,191 @@
+
+<div id="status-bar">
+  <div class="left">
+    <span class="title">Miniverse Terminal</span>
+    <span id="mode-pill" class="pill">Normal</span>
+  </div>
+  <div class="right">
+    <div class="status-item">
+      <span id="ws-dot" class="dot gray"></span>
+      <span id="ws-text" class="value">WS: Connecting...</span>
+    </div>
+    <div class="status-item">
+      <span id="serial-dot" class="dot gray"></span>
+      <span id="serial-text" class="value">Serial: Not connected</span>
+    </div>
+    <button id="clear-btn" class="clear-btn" type="button">Clear</button>
+  </div>
+</div>
+<div id="terminal"></div>
+
+<style>
+  #status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0E1116;
+    border-bottom: 1px solid #1F2430;
+    padding: 8px 12px;
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 14px;
+    color: #C8D1E1;
+    gap: 16px;
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .title {
+    color: #E5E7EB;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .pill {
+    padding: 2px 8px;
+    border: 1px solid #2C3444;
+    border-radius: 999px;
+    background: #141821;
+    color: #C8D1E1;
+    font-size: 12px;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .dot.green { background: #20d14b; }
+  .dot.red   { background: #e55353; }
+  .dot.gray  { background: #5a5a5a; }
+
+  .value { color: #C8D1E1; }
+
+  .clear-btn {
+    background: transparent;
+    color: #E5E7EB;
+    border: 1px solid #2C3444;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .clear-btn:hover { background: #161C26; }
+
+  #terminal {
+    width: 100%;
+    height: calc(100% - 40px);
+    background: #000;
+    padding: 10px;
+  }
+
+  :global(.xterm) {
+    height: 100%;
+  }
+
+  :global(.xterm-viewport) {
+    scrollbar-width: thin;
+    scrollbar-color: #4B5563 #0E1116;
+  }
+</style>
+
+<script>
+  import { TerminalManager } from '../client/terminal';
+  import { wsClient } from '../lib/websocket';
+
+  let terminal: TerminalManager | null = null;
+
+  function setDot(id: string, state: 'green'|'red'|'gray') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('green', 'red', 'gray');
+    el.classList.add(state);
+  }
+
+  function setText(id: string, text: string) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function setMode(mode: string) {
+    const pill = document.getElementById('mode-pill');
+    if (pill) pill.textContent = mode;
+  }
+
+  async function init() {
+    const container = document.getElementById('terminal');
+    if (!container) return;
+
+    try {
+      await wsClient.connect();
+
+      // Initial states
+      setDot('ws-dot', 'green');
+      setText('ws-text', 'WS: Connected');
+      setDot('serial-dot', 'gray');
+      setText('serial-text', 'Serial: Not connected');
+      setMode('Normal');
+
+      // Wire Clear button
+  const clearBtn = document.getElementById('clear-btn');
+  clearBtn?.addEventListener('click', () => terminal?.clear(true));
+
+      // Events
+      wsClient.on('connected', () => {
+        setDot('ws-dot', 'green');
+        setText('ws-text', 'WS: Connected');
+      });
+
+      wsClient.on('serial_status', (e: any) => {
+        if (e.connected && e.port && e.board_name) {
+          setDot('serial-dot', 'green');
+          setText('serial-text', `Serial: ${e.port} (${e.board_name})`);
+        } else {
+          setDot('serial-dot', 'gray');
+          setText('serial-text', 'Serial: Not connected');
+        }
+      });
+
+      wsClient.on('mode_changed', (e: any) => {
+        const mode = e.mode.charAt(0).toUpperCase() + e.mode.slice(1);
+        setMode(mode);
+        // Also ask terminal to refresh prompt immediately
+        if (terminal) { (terminal as any).pendingPrompt = false; }
+        terminal?.clear(false); // do not show welcome, just force repaint
+      });
+
+      terminal = new TerminalManager(container);
+    } catch (err) {
+      console.error('Init failed:', err);
+      setDot('ws-dot', 'red');
+      setText('ws-text', 'WS: Disconnected');
+      setDot('serial-dot', 'gray');
+      setText('serial-text', 'Serial: Not connected');
+      setMode('Normal');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('beforeunload', () => terminal?.destroy());
+</script>

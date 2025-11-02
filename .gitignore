@@ -1,31 +1,28 @@
-# Dependencies
-node_modules/
-package-lock.json
+# Backend
+backend/target/
+backend/Cargo.lock
 
-# Build outputs
-dist/
-build/
-.astro/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.astro/
+frontend/package-lock.json
 
-# Rust
-target/
-Cargo.lock
+# MQTT
+mqtt_broker/data/
+mqtt_broker/logs/
+/tmp/mosquitto/
 
-# Logs
-*.log
-npm-debug.log*
-
-# Environment
-.env
-.env.local
-.env.production
-
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

@@ -1,51 +1,83 @@
-use actix_files::Files;
-use actix_web::{middleware::Logger, web, App, HttpServer};
 use actix_cors::Cors;
-use env_logger::Env;
-use std::path::Path;
+use actix_web::{web, App, HttpServer};
 
-mod handlers;
-mod models;
+mod config;
+mod events;
+mod mqtt;
 mod serial;
-mod cli;
+mod state;
+mod websocket;
 
-use handlers::websocket::websocket_handler;
-use handlers::api::get_available_ports;
+use config::Config;
+use events::SystemEvent;
+use mqtt::MqttManager;
+use serial::SerialBridge;
+use state::AppState;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init_from_env(Env::default().default_filter_or("info"));
+    env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
 
-    log::info!("Starting Miniverse Discovery Terminal Backend");
-    log::info!("Server available at: http://localhost:8080");
+    log::info!("=== Miniverse Backend Starting ===");
 
-    HttpServer::new(|| {
+    log::info!("Initializing MQTT manager...");
+    let (mqtt, mut event_loop) = MqttManager::new("localhost", 1883, "miniverse-backend");
+
+    log::info!("Subscribing to MQTT topic: miniverse/#");
+    if let Err(e) = mqtt.subscribe("miniverse/#").await {
+        log::error!("MQTT subscribe failed: {}", e);
+    }
+
+    log::info!("Initializing serial bridge...");
+    let serial = SerialBridge::new();
+
+    log::info!("Creating application state...");
+    let config = Config::default();
+    let state = web::Data::new(AppState::new(config, mqtt, serial));
+
+    log::info!("Starting MQTT listener in separate thread...");
+    let mqtt_state = state.clone();
+    tokio::spawn(async move {
+        log::info!("MQTT listener started");
+        loop {
+            match event_loop.poll().await {
+                Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(p))) => {
+                    let topic = p.topic.clone();
+                    let payload = String::from_utf8_lossy(&p.payload).to_string();
+
+                    mqtt_state.broadcast(SystemEvent::MqttMessage {
+                        topic,
+                        payload,
+                    });
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("MQTT error: {}", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                }
+            }
+        }
+    });
+
+    let host = state.config.server.host.clone();
+    let port = state.config.server.port;
+
+    log::info!("Starting HTTP server on {}:{}...", host, port);
+
+    HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin("http://localhost:4321")
-            .allowed_origin("http://localhost:3000")
-            .allowed_methods(vec!["GET", "POST"])
-            .allowed_headers(vec!["content-type", "authorization"])
-            .supports_credentials()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
             .max_age(3600);
 
-        let app = App::new()
+        App::new()
             .wrap(cors)
-            .wrap(Logger::default())
-            .route("/ws", web::get().to(websocket_handler))
-            .route("/api/ports", web::get().to(get_available_ports));
-
-        // Check if dist folder exists before trying to serve
-        let dist_path = "../frontend/dist";
-        if Path::new(dist_path).exists() && Path::new(dist_path).is_dir() {
-            log::info!("Serving static files from {}", dist_path);
-            app.service(Files::new("/", dist_path).index_file("index.html"))
-        } else {
-            log::info!("Development mode: Frontend on http://localhost:4321");
-            app
-        }
+            .app_data(state.clone())
+            .route("/ws", web::get().to(websocket::ws_route))
+            .route("/health", web::get().to(|| async { "OK" }))
     })
-    .workers(2)
-    .bind("127.0.0.1:8080")?
+    .bind((host.as_str(), port))?
     .run()
     .await
 }
