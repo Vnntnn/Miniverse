@@ -38,6 +38,9 @@ pub enum SystemEvent {
         transport: String,
         publish_topic: String,
         subscribe_topics: Vec<String>,
+        // Optional board id derived from current serial board name (lowercased, spaces->underscore)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        board_id: Option<String>,
     },
 
     

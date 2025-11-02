@@ -161,9 +161,13 @@ void handleCommand(String cmd) {
   
   // System Info
   else if (up == "INFO" || up == "/INFO") {
+    // Print to serial for legacy behavior
     Serial.println("SENSORS:DHT22:2,LED:13");
     Serial.println("BOARD:Arduino UNO R4 WiFi");
     Serial.println("FIRMWARE:1.0.0");
+    // Also publish a compact info over MQTT
+    String topic = String("miniverse/") + BOARD_ID + "/info/state";
+    client.publish(topic.c_str(), "SENSORS:DHT22:2,LED:13;BOARD:Arduino UNO R4 WiFi;FIRMWARE:1.0.0");
   }
   else if (up == "/HELP" || up == "HELP") {
     Serial.println("CMDS: TEMP, LIGHT ON|OFF|TOGGLE, SET LIGHT <0-255>, /INFO, /VERSION, /ABOUT");

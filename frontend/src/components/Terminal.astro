@@ -204,6 +204,7 @@
 
   let terminal: TerminalManager | null = null;
   let topicsExpanded = false;
+  let lastBoardId: string | null = null;
   const monitorStore = new Map(); // topic -> array of {ts, payload}
   const PER_TOPIC_LIMIT = 20;
 
@@ -276,8 +277,8 @@
       wsClient.on('serial_status', (e: any) => {
         if (e.connected && e.board_name) {
           setDot('serial-dot', 'green');
-          // Show only device name per request
-          setText('serial-text', `Serial: ${e.board_name}`);
+          const idSuffix = lastBoardId ? ` (${lastBoardId})` : '';
+          setText('serial-text', `Serial: ${e.board_name}${idSuffix}`);
         } else {
           setDot('serial-dot', 'gray');
           setText('serial-text', 'Serial: Not connected');
@@ -295,6 +296,16 @@
       wsClient.on('transport_changed', (e: any) => {
         const t = (e.transport || 'serial').toLowerCase();
         setTransport(t as any, e.publish_topic, e.subscribe_topics);
+        lastBoardId = e.board_id || lastBoardId;
+        // Also refresh serial text to include board id when available
+        const currentText = (document.getElementById('serial-text') as HTMLElement)?.textContent || '';
+        if (lastBoardId && currentText.startsWith('Serial: ') && !currentText.includes(`(${lastBoardId})`)) {
+          // append id if a board name is shown
+          const parts = currentText.match(/^Serial: (.+)$/);
+          if (parts && parts[1] && !parts[1].includes('Not connected')) {
+            setText('serial-text', `Serial: ${parts[1]} (${lastBoardId})`);
+          }
+        }
       });
 
       // MQTT messages: feed monitor store

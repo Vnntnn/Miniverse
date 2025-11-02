@@ -227,7 +227,7 @@ export class TerminalManager {
     }
 
     // Provide guidance if user tries Arduino commands without a serial connection
-    const looksArduino = ['temp','distance','date','time','season','light','set','lcd','/info','/help','/version','/about','/INFO','/HELP','/VERSION','/ABOUT']
+    const looksArduino = ['temp','distance','light','set','lcd']
       .some(k => trimmed.startsWith(k));
     if (looksArduino && !this.serialConnected) {
       this.writeln('\n[ERR] Serial not connected. Use "config" -> "ports" -> "connect <n> [baud]".');
@@ -251,7 +251,7 @@ export class TerminalManager {
       low.startsWith('connect ') || low === 'connect' ||
       low.startsWith('disconnect') || low.startsWith('status') ||
       low.startsWith('transport serial') || low.startsWith('transport mqtt') ||
-      low.startsWith('mqtt sub ') || low.startsWith('mqtt unsub ')
+      low.startsWith('mqtt sub ') || low.startsWith('mqtt unsub ') || low === 'mqtt subs'
     );
     if (m === 'config' && isConfig) return true;
 
@@ -360,7 +360,8 @@ export class TerminalManager {
     this.writeln('  status                 - Show status');
     this.writeln('  transport serial|mqtt  - Select routing (CONFIG only)');
     this.writeln('  mqtt sub <topic>       - Subscribe to topic');
-    this.writeln('  mqtt unsub <topic>     - Unsubscribe from topic');
+  this.writeln('  mqtt unsub <topic>     - Unsubscribe from topic');
+  this.writeln('  mqtt subs              - List current subscriptions');
     this.writeln('');
     this.writeln('Normal Mode:');
     this.writeln('  temp <C|F|K>           - Read temperature');

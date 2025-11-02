@@ -6,7 +6,7 @@ export type SystemEvent =
   | { type: 'error'; source: string; message: string }
   | { type: 'connected' }
   | { type: 'mode_changed'; mode: string }
-  | { type: 'transport_changed'; transport: string; publish_topic: string; subscribe_topics: string[] };
+  | { type: 'transport_changed'; transport: string; publish_topic: string; subscribe_topics: string[]; board_id?: string };
 
 export interface SensorDetail {
   id: number;

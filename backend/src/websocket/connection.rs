@@ -102,7 +102,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConnection {
                                 match mode {
                                     "serial" => {
                                         self.transport = Transport::Serial;
-                                        let evt = SystemEvent::TransportChanged { transport: "serial".into(), publish_topic: "".into(), subscribe_topics: vec![] };
+                                        let evt = SystemEvent::TransportChanged { transport: "serial".into(), publish_topic: "".into(), subscribe_topics: vec![], board_id: None };
                                         if let Ok(json) = serde_json::to_string(&evt) { ctx.text(json); }
                                         let ok = SystemEvent::Output { content: "Transport: serial".into() };
                                         if let Ok(json) = serde_json::to_string(&ok) { ctx.text(json); }
@@ -112,7 +112,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConnection {
                                         let publish = "miniverse/command".to_string();
                                         // NOTE: we cannot access config here synchronously; keep default
                                         let subs = vec!["miniverse/#".to_string()];
-                                        let evt = SystemEvent::TransportChanged { transport: "mqtt".into(), publish_topic: publish, subscribe_topics: subs };
+                                        let evt = SystemEvent::TransportChanged { transport: "mqtt".into(), publish_topic: publish, subscribe_topics: subs, board_id: None };
                                         if let Ok(json) = serde_json::to_string(&evt) { ctx.text(json); }
                                         let ok = SystemEvent::Output { content: "Transport: mqtt".into() };
                                         if let Ok(json) = serde_json::to_string(&ok) { ctx.text(json); }
