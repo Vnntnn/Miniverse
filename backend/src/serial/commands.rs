@@ -379,30 +379,65 @@ async fn handle_connect(args: &[&str], state: &AppState) -> SystemEvent {
             Ok(ports) if idx < ports.len() => {
                 let port_info = &ports[idx];
                 
-                let result = {
-                    let mut serial = state.serial.write().await;
-                    serial.connect(&port_info.port_name, baud, port_info.board_name.clone())
+                // On macOS prefer /dev/cu.* over /dev/tty.* and add a short retry loop for busy ports
+                let mut last_err: Option<String> = None;
+                let candidates: Vec<String> = if port_info.port_name.contains("/tty.") {
+                    vec![port_info.port_name.replace("/tty.", "/cu."), port_info.port_name.clone()]
+                } else {
+                    vec![port_info.port_name.clone()]
                 };
-                
-                match result {
-                    Ok(_) => {
-                        state.broadcast(SystemEvent::SerialStatus {
-                            connected: true,
-                            port: Some(port_info.port_name.clone()),
-                            baud_rate: Some(baud),
-                            board_name: Some(port_info.board_name.clone()),
-                        });
-                        SystemEvent::Output {
-                            content: format!(
-                                "Connected: {} - {} @ {} baud",
-                                port_info.port_name, port_info.board_name, baud
-                            ),
+
+                let mut connected = false;
+                for cand in &candidates {
+                    // up to 3 attempts in case the port is busy right after upload/reset
+                    for _attempt in 1..=3 {
+                        let result = {
+                            let mut serial = state.serial.write().await;
+                            serial.connect(cand, baud, port_info.board_name.clone())
+                        };
+                        match result {
+                            Ok(_) => { connected = true; break; }
+                            Err(e) => {
+                                last_err = Some(e.clone());
+                                let lower = e.to_lowercase();
+                                if lower.contains("busy") || lower.contains("device") || lower.contains("resource") {
+                                    // small backoff then retry
+                                    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                                    continue;
+                                } else {
+                                    break; // non-busy error, stop retrying this candidate
+                                }
+                            }
                         }
                     }
-                    Err(e) => SystemEvent::Error {
-                        source: "serial".to_string(),
-                        message: e,
-                    },
+                    if connected { break; }
+                }
+
+                if connected {
+                    state.broadcast(SystemEvent::SerialStatus {
+                        connected: true,
+                        port: Some(port_info.port_name.clone()),
+                        baud_rate: Some(baud),
+                        board_name: Some(port_info.board_name.clone()),
+                    });
+                    SystemEvent::Output {
+                        content: format!(
+                            "Connected: {} - {} @ {} baud",
+                            port_info.port_name, port_info.board_name, baud
+                        ),
+                    }
+                } else {
+                    let msg = if let Some(e) = last_err {
+                        let el = e.to_lowercase();
+                        if el.contains("busy") || el.contains("resource busy") || el.contains("device busy") {
+                            "Port is busy. Close Arduino IDE Serial Monitor/Plotter or any tool holding the port (screen, platformio, etc.). On macOS, try: lsof /dev/cu.* to see holders. After upload, re-open the web app and run 'ports' again; if needed, unplug/replug the USB to re-enumerate.".to_string()
+                        } else {
+                            e
+                        }
+                    } else {
+                        "Failed to open port (unknown error)".to_string()
+                    };
+                    SystemEvent::Error { source: "serial".to_string(), message: msg }
                 }
             }
             Ok(_) => SystemEvent::Error {
