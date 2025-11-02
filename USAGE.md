@@ -1,9 +1,9 @@
-# 🌌 MINIVERSE - Complete Usage Guide v3.0
+# 🌌 MINIVERSE - Complete Usage Guide v3.1
 
 ## 🎯 Two-Mode Terminal System
 
 ### **Normal Mode** (Default)
-- Read-only monitoring
+- Monitoring
 - View system status
 - See MQTT messages
 - Prompt: `Miniverse(Normal)>`
@@ -45,13 +45,20 @@
 
 6. **Check sensors:**
    ```
-   Miniverse(Config)#> ./info
+   Miniverse(Config)#> /info
    ```
 
-7. **Control devices:**
+7. **Control devices (Serial):**
    ```
-   Miniverse(Config)#> led on
-   Miniverse(Config)#> read temp
+   Miniverse(Config)#> light on
+   Miniverse(Config)#> temp
+   Miniverse(Config)#> set light 128
+   ```
+
+8. **Or control via MQTT:**
+   ```
+   Miniverse(Normal)> mqtt sub miniverse/#
+   Miniverse(Normal)> mqtt pub miniverse/command "light on"
    ```
 
 ---
@@ -75,15 +82,22 @@
 | `status` | Show connection status |
 | `./info` | Display connected sensors |
 
-### Arduino Control (Config Mode, Must be connected)
+### Arduino Control (Config Mode, Serial)
 | Command | Description |
 |---------|-------------|
-| `led on` | Turn LED on |
-| `led off` | Turn LED off |
-| `led toggle` | Toggle LED state |
-| `read temp` | Read temperature |
-| `read humidity` | Read humidity |
-| `read all` | Read all sensors |
+| `temp` | Read temperature |
+| `light on` | Turn LED on |
+| `light off` | Turn LED off |
+| `light toggle` | Toggle LED state |
+| `set light <0-255>` | Set LED brightness (PWM) |
+| `/info` | Display sensors/board/firmware |
+| `/help`, `/version`, `/about` | Firmware info |
+
+### MQTT Commands (Both Modes)
+| Command | Description |
+|---------|-------------|
+| `mqtt sub <topic>` | Subscribe to topic |
+| `mqtt pub <topic> <payload>` | Publish a payload |
 
 ---
 
@@ -122,7 +136,7 @@ Available Ports:
 Miniverse(Config)#> connect 0 115200
 ✓ Serial: /dev/cu.usbserial-110 - Arduino Uno WiFi Rev2 @ 115200 baud
 
-Miniverse(Config)#> ./info
+Miniverse(Config)#> /info
 Connected Sensors:
   [1] DHT22 (Pin 2)
   [2] LED (Pin 13)
@@ -130,11 +144,11 @@ Connected Sensors:
 Board: Arduino Uno WiFi Rev2
 Firmware: v1.0.0
 
-Miniverse(Config)#> led on
-LED on
+Miniverse(Config)#> light on
+OK
 
-Miniverse(Config)#> read temp
-Temperature: 25.3°C
+Miniverse(Config)#> temp
+TEMP:25.3C
 
 Miniverse(Config)#> exit
 ✓ Mode: normal
@@ -146,9 +160,9 @@ Miniverse(Normal)>
 
 ## 🐛 Troubleshooting
 
-### Can't enter Config mode?
-- You can always enter Config mode from Normal mode
-- Type: `config`
+### Prompt doesn’t return after a command?
+- Firmware must reply to every command (OK or DATA). Use the provided sketch.
+- If using MQTT publish, you may not get an immediate payload back—that’s normal.
 
 ### Can't connect to Arduino?
 1. List ports: `ports`
@@ -156,9 +170,9 @@ Miniverse(Normal)>
 3. Try different baud rates: `connect 0 9600`
 
 ### Commands not working?
-- Make sure you're in Config mode (prompt shows `#>`)
-- Check if Arduino is connected: `status`
-- Verify Arduino code is uploaded
+- For Serial: ensure Config mode and `status` shows connected.
+- For MQTT: ensure broker is running and the device is subscribed to `miniverse/command`.
+- Verify Arduino code is uploaded (see `arduino_sketch/`).
 
 ---
 

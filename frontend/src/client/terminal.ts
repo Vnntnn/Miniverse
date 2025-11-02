@@ -99,7 +99,8 @@ export class TerminalManager {
   private handleEvent(e: SystemEvent) {
     switch (e.type) {
       case 'connected':
-        this.writeln('\n[OK] Connected to Miniverse Backend');
+        this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Connected to Miniverse Backend`);
+        this.prompt();
         break;
         
       case 'serial_status':
@@ -107,12 +108,13 @@ export class TerminalManager {
         if (e.connected && e.port && e.board_name) {
           this.serialPort = e.port;
           this.boardName = e.board_name;
-          this.writeln(`\n[OK] Serial: ${e.port} - ${e.board_name} @ ${e.baud_rate} baud`);
+          this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Serial: ${e.port} - ${e.board_name} @ ${e.baud_rate} baud`);
         } else {
           this.serialPort = '';
           this.boardName = '';
-          this.writeln('\n[ERR] Serial disconnected');
+          this.writeln(`\n\x1b[31m[ERR]\x1b[0m Serial disconnected`);
         }
+        this.prompt();
         break;
         
       case 'sensor_info':
@@ -123,26 +125,29 @@ export class TerminalManager {
         });
         this.writeln(`\nBoard: ${e.board}`);
         this.writeln(`Firmware: ${e.firmware}`);
+        this.prompt();
         break;
         
       case 'output':
         this.writeln(`\n${e.content}`);
+        this.prompt();
         break;
         
       case 'error':
-        this.writeln(`\n[ERR] ERROR [${e.source}]: ${e.message}`);
+        this.writeln(`\n\x1b[31m[ERR]\x1b[0m ERROR [${e.source}]: ${e.message}`);
+        this.prompt();
         break;
         
       case 'mode_changed':
         this.mode = e.mode as Mode;
-        this.writeln(`\n[OK] Mode: ${e.mode}`);
+        this.writeln(`\n\x1b[38;2;0;200;0m[OK]\x1b[0m Mode: ${e.mode}`);
         // Immediately refresh prompt on mode change
         this.pendingPrompt = false;
         this.prompt();
         break;
         
       case 'mqtt_message':
-        this.writeln(`\n[MQTT] ${e.topic}: ${e.payload}`);
+        this.writeln(`\n\x1b[38;2;0;180;200m[MQTT]\x1b[0m ${e.topic}: ${e.payload}`);
         break;
     }
   }
@@ -190,7 +195,7 @@ export class TerminalManager {
     }
 
     // Provide guidance if user tries Arduino commands without a serial connection
-    const looksArduino = ['temp','distance','date','time','season','light','set','lcd','/info','/help','/version','/about']
+    const looksArduino = ['temp','distance','date','time','season','light','set','lcd','/info','/help','/version','/about','/INFO','/HELP','/VERSION','/ABOUT']
       .some(k => trimmed.startsWith(k));
     if (looksArduino && !this.serialConnected) {
       this.writeln('\n[ERR] Serial not connected. Use "config" -> "ports" -> "connect <n> [baud]".');
@@ -198,10 +203,9 @@ export class TerminalManager {
       return;
     }
 
-    // Send to backend
+    // Send to backend; prompt will be shown upon 'output' or 'error'
     this.pendingPrompt = false;
     wsClient.sendCommand(trimmed);
-    this.prompt();
   }
 
   private replaceCurrentLine(text: string) {
@@ -277,23 +281,34 @@ export class TerminalManager {
     this.writeln('==================');
     this.writeln('');
     this.writeln('System:');
-    this.writeln('  help       - Show this help');
-    this.writeln('  clear      - Clear screen');
-    this.writeln('  config     - Enter config mode');
-    this.writeln('  normal     - Enter normal mode');
+  this.writeln('  help           - Show this help');
+    this.writeln('  clear          - Clear screen');
+    this.writeln('  config         - Enter config mode');
+    this.writeln('  normal         - Enter normal mode');
     this.writeln('');
     this.writeln('Config Mode:');
-    this.writeln('  ports              - List serial ports');
-    this.writeln('  connect <n> [baud] - Connect to port');
-    this.writeln('  disconnect         - Disconnect serial');
-    this.writeln('  status             - Show status');
+    this.writeln('  ports                  - List serial ports');
+    this.writeln('  connect <n> [baud]     - Connect to port');
+    this.writeln('  disconnect             - Disconnect serial');
+    this.writeln('  status                 - Show status');
     this.writeln('');
     this.writeln('Normal Mode:');
-    this.writeln('  temp           - Read temperature');
-    this.writeln('  light on/off   - Control LED');
-    this.writeln('  /info          - Device info');
-    this.writeln('  /help          - Firmware help');
-    this.writeln('  /version       - Firmware version');
+    this.writeln('  temp                   - Read temperature');
+    this.writeln('  distance               - Read distance');
+    this.writeln('  date | time | season   - Read date/time/season');
+    this.writeln('  light on/off/toggle    - Control LED');
+    this.writeln('  set light <0-255>      - Set LED brightness');
+    this.writeln('  set unit temp C|F|K    - Set temperature unit');
+    this.writeln('  lcd clear              - Clear LCD');
+    this.writeln('  lcd show line "a","b" - Show two lines');
+    this.writeln('  /info | /help | /about | /version');
+    this.writeln('');
+    this.writeln('MQTT:');
+    this.writeln('  mqtt sub <topic>');
+    this.writeln('  mqtt pub <topic> <payload>');
+    this.writeln('');
+    this.writeln('Transport:');
+    this.writeln('  transport serial | transport mqtt');
     this.writeln('');
   }
 

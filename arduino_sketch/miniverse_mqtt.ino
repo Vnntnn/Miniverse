@@ -63,32 +63,42 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void handleCommand(String cmd) {
   cmd.trim();
   
+  // Normalize to uppercase for matching while keeping original for arguments
+  String up = cmd; up.toUpperCase();
+
   // LED Controls
-  if (cmd == "LED_ON") {
+  if (up == "LED_ON" || up == "LIGHT ON") {
     digitalWrite(LED_PIN, HIGH);
     ledState = true;
-    Serial.println("LED ON");
+    Serial.println("OK");
     client.publish("miniverse/status", "LED turned on");
   }
-  else if (cmd == "LED_OFF") {
+  else if (up == "LED_OFF" || up == "LIGHT OFF") {
     digitalWrite(LED_PIN, LOW);
     ledState = false;
-    Serial.println("LED OFF");
+    Serial.println("OK");
     client.publish("miniverse/status", "LED turned off");
   }
-  else if (cmd == "LED_TOGGLE") {
+  else if (up == "LED_TOGGLE" || up == "LIGHT TOGGLE") {
     ledState = !ledState;
     digitalWrite(LED_PIN, ledState ? HIGH : LOW);
-    Serial.println(ledState ? "LED ON" : "LED OFF");
+    Serial.println("OK");
     client.publish("miniverse/status", ledState ? "LED on" : "LED off");
+  }
+  // set light <value>
+  else if (up.startsWith("SET LIGHT ")) {
+    int val = cmd.substring(String("set light ").length()).toInt();
+    val = constrain(val, 0, 255);
+    analogWrite(LED_PIN, val);
+    Serial.println("OK");
   }
   
   // Sensor Readings
-  else if (cmd == "READ_TEMP") {
+  else if (up == "READ_TEMP" || up == "TEMP") {
     float temp = dht.readTemperature();
     if (!isnan(temp)) {
       char buf[32];
-      sprintf(buf, "Temperature: %.1f°C", temp);
+      sprintf(buf, "TEMP:%.1fC", temp);
       Serial.println(buf);
     } else {
       Serial.println("ERROR: Failed to read temperature");
@@ -118,8 +128,19 @@ void handleCommand(String cmd) {
   }
   
   // System Info
-  else if (cmd == "INFO") {
+  else if (up == "INFO" || up == "/INFO") {
     Serial.println("SENSORS:DHT22:2,LED:13");
+    Serial.println("BOARD:Arduino UNO R4 WiFi");
+    Serial.println("FIRMWARE:1.0.0");
+  }
+  else if (up == "/HELP" || up == "HELP") {
+    Serial.println("CMDS: TEMP, LIGHT ON|OFF|TOGGLE, SET LIGHT <0-255>, /INFO, /VERSION, /ABOUT");
+  }
+  else if (up == "/VERSION" || up == "VERSION") {
+    Serial.println("VERSION:1.0.0");
+  }
+  else if (up == "/ABOUT" || up == "ABOUT") {
+    Serial.println("ABOUT:Miniverse Arduino Firmware");
   }
   
   // Unknown command

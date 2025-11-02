@@ -3,11 +3,17 @@
   <div class="left">
     <span class="title">Miniverse Terminal</span>
     <span id="mode-pill" class="pill">Normal</span>
+    <span id="transport-pill" class="pill">Serial</span>
   </div>
   <div class="right">
     <div class="status-item">
       <span id="ws-dot" class="dot gray"></span>
       <span id="ws-text" class="value">WS: Connecting...</span>
+    </div>
+    <div class="status-item">
+      <span id="transport-dot" class="dot gray"></span>
+      <span id="transport-text" class="value">Transport: Serial</span>
+      <span id="transport-topics" class="value"></span>
     </div>
     <div class="status-item">
       <span id="serial-dot" class="dot gray"></span>
@@ -78,6 +84,13 @@
 
   .value { color: #C8D1E1; }
 
+  #transport-topics {
+    display: block;
+    white-space: pre-wrap; /* allow multi-line topics */
+    color: #9FB2CC;
+    font-size: 12px;
+  }
+
   .clear-btn {
     background: transparent;
     color: #E5E7EB;
@@ -128,6 +141,24 @@
     if (pill) pill.textContent = mode;
   }
 
+  function setTransport(transport: 'serial'|'mqtt', publish?: string, subs?: string[]) {
+    const dot = document.getElementById('transport-dot');
+    const text = document.getElementById('transport-text');
+    const topics = document.getElementById('transport-topics');
+    const pill = document.getElementById('transport-pill');
+    if (text) text.textContent = `Transport: ${transport.toUpperCase()}`;
+    if (pill) pill.textContent = transport.toUpperCase();
+    if (transport === 'mqtt') {
+      dot?.classList.remove('gray'); dot?.classList.add('green');
+      const list = (subs && subs.length) ? subs : ['miniverse/#'];
+      const subStr = list.join('\n');
+      if (topics) topics.textContent = `pub: ${publish ?? 'miniverse/command'}\nsub:\n${subStr}`;
+    } else {
+      dot?.classList.remove('green'); dot?.classList.add('gray');
+      if (topics) topics.textContent = '';
+    }
+  }
+
   async function init() {
     const container = document.getElementById('terminal');
     if (!container) return;
@@ -170,12 +201,18 @@
         terminal?.clear(false); // do not show welcome, just force repaint
       });
 
+      wsClient.on('transport_changed', (e: any) => {
+        const t = (e.transport || 'serial').toLowerCase();
+        setTransport(t as any, e.publish_topic, e.subscribe_topics);
+      });
+
       terminal = new TerminalManager(container);
     } catch (err) {
       console.error('Init failed:', err);
       setDot('ws-dot', 'red');
       setText('ws-text', 'WS: Disconnected');
-      setDot('serial-dot', 'gray');
+  setTransport('serial');
+  setDot('serial-dot', 'gray');
       setText('serial-text', 'Serial: Not connected');
       setMode('Normal');
     }

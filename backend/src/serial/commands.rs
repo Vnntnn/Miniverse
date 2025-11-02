@@ -1,5 +1,5 @@
 use crate::events::{SystemEvent, SensorDetail};
-use crate::state::AppState;
+use crate::state::{AppState, Transport};
 use crate::serial::SerialBridge;
 
 pub async fn handle_serial_command(cmd: &str, state: &AppState) -> SystemEvent {
@@ -11,32 +11,94 @@ pub async fn handle_serial_command(cmd: &str, state: &AppState) -> SystemEvent {
         "connect" => handle_connect(&parts[1..], state).await,
         "disconnect" => handle_disconnect(state).await,
         "status" => handle_status(state).await,
-        // Friendly aliases and firmware meta
+        // MQTT utility commands
+        "mqtt" => handle_mqtt(&parts[1..], state).await,
+    // Transport selector
+    "transport" => handle_transport(&parts[1..], state).await,
+    // Friendly aliases and firmware meta
         "/help" => SystemEvent::Output { content: backend_help_text() },
         "/version" => SystemEvent::Output { content: "Miniverse Firmware: v1.0.0".to_string() },
         "/about" => SystemEvent::Output { content: "Miniverse Arduino Firmware - Physical Computing & IoT".to_string() },
         "/info" | "info" => handle_info(state).await,
-        // Friendly user commands mapped to firmware
-        "temp" => alias_temp(state).await,
-    "light" => alias_light(&parts[1..], state).await,
-        // known helpers kept for compatibility
-    "read" => handle_read(&parts[1..], state).await,
-    "led" => handle_led(&parts[1..], state).await,
-        // otherwise, forward any command directly to Arduino
-        _ => forward_to_arduino(cmd, state).await,
+        // For all other commands, forward using current transport
+        _ => forward_via_transport(cmd, state).await,
     }
 }
 
 fn backend_help_text() -> String {
     let mut s = String::new();
-    s.push_str("\n+--------------------------- HELP ---------------------------+\n");
-    s.push_str("| System                 | help, clear, config, normal/exit  |\n");
-    s.push_str("| Serial (config mode)   | ports, connect <n> [baud],        |\n");
-    s.push_str("|                        | disconnect, status, /info         |\n");
-    s.push_str("| Sensors (normal mode)  | temp                              |\n");
-    s.push_str("| LED                    | light on/off/toggle               |\n");
-    s.push_str("+-----------------------------------------------------------+\n");
+    s.push_str("\n+------------------------------ HELP ------------------------------+\n");
+    s.push_str("| System                 | help, clear, config, normal/exit       |\n");
+    s.push_str("| Serial (config mode)   | ports, connect <n> [baud],             |\n");
+    s.push_str("|                        | disconnect, status, /info              |\n");
+    s.push_str("| Device (normal mode)   | temp, distance, date, time, season     |\n");
+    s.push_str("| LED                    | light on/off/toggle, set light <0-255> |\n");
+    s.push_str("| Units                  | set unit temp <C|F|K>                 |\n");
+    s.push_str("| LCD                    | lcd clear, lcd show line \"a\",\"b\"   |\n");
+    s.push_str("| Firmware Meta          | /help, /version, /about, /info         |\n");
+    s.push_str("| Transport              | transport serial | transport mqtt        |\n");
+    s.push_str("| MQTT                   | mqtt sub <topic>, mqtt pub <topic> <payload> |\n");
+    s.push_str("+----------------------------------------------------------------+\n");
     s
+}
+
+async fn handle_transport(args: &[&str], state: &AppState) -> SystemEvent {
+    let mode = args.get(0).copied().unwrap_or("");
+    match mode.to_lowercase().as_str() {
+        "serial" => {
+            let mut t = state.transport.write().await;
+            *t = Transport::Serial;
+                // Notify UI
+                state.broadcast(crate::events::SystemEvent::TransportChanged {
+                    transport: "serial".to_string(),
+                    publish_topic: "".to_string(),
+                    subscribe_topics: vec![],
+                });
+            SystemEvent::Output { content: "Transport: serial".to_string() }
+        }
+        "mqtt" => {
+            let mut t = state.transport.write().await;
+            *t = Transport::Mqtt;
+                // Compute topics from config
+                let publish_topic = "miniverse/command".to_string();
+                let subscribe_topics = state.config.mqtt.default_topics.clone();
+                state.broadcast(crate::events::SystemEvent::TransportChanged {
+                    transport: "mqtt".to_string(),
+                    publish_topic: publish_topic.clone(),
+                    subscribe_topics: subscribe_topics.clone(),
+                });
+            SystemEvent::Output { content: "Transport: mqtt".to_string() }
+        }
+        _ => SystemEvent::Output { content: "Usage: transport <serial|mqtt>".to_string() },
+    }
+}
+
+async fn handle_mqtt(args: &[&str], state: &AppState) -> SystemEvent {
+    let sub = args.get(0).copied().unwrap_or("");
+    match sub {
+        "sub" | "subscribe" => {
+            let topic = match args.get(1) { Some(t) => *t, None => {
+                return SystemEvent::Error { source: "mqtt".to_string(), message: "Usage: mqtt sub <topic>".to_string() };
+            }};
+            let mqtt = state.mqtt.read().await;
+            match mqtt.subscribe(topic).await {
+                Ok(_) => SystemEvent::Output { content: format!("MQTT: subscribed to {}", topic) },
+                Err(e) => SystemEvent::Error { source: "mqtt".to_string(), message: e },
+            }
+        }
+        "pub" | "publish" => {
+            let topic = match args.get(1) { Some(t) => *t, None => {
+                return SystemEvent::Error { source: "mqtt".to_string(), message: "Usage: mqtt pub <topic> <payload>".to_string() };
+            }};
+            let payload = if args.len() > 2 { args[2..].join(" ") } else { String::new() };
+            let mqtt = state.mqtt.read().await;
+            match mqtt.publish(topic, payload.as_bytes()).await {
+                Ok(_) => SystemEvent::Output { content: format!("MQTT: published to {}", topic) },
+                Err(e) => SystemEvent::Error { source: "mqtt".to_string(), message: e },
+            }
+        }
+        _ => SystemEvent::Output { content: "Usage:\n  mqtt sub <topic>\n  mqtt pub <topic> <payload>\n".to_string() },
+    }
 }
 
 async fn handle_ports() -> SystemEvent {
@@ -203,41 +265,6 @@ async fn handle_info(state: &AppState) -> SystemEvent {
     }
 }
 
-async fn alias_temp(state: &AppState) -> SystemEvent {
-    let serial = state.serial.read().await;
-    if !serial.is_connected() {
-        return SystemEvent::Error { source: "serial".to_string(), message: "Not connected".to_string() };
-    }
-    if let Err(e) = serial.send_command("READ_TEMP") {
-        return SystemEvent::Error { source: "serial".to_string(), message: format!("Send failed: {}", e) };
-    }
-    match serial.read_line(3000) {
-        Ok(resp) => SystemEvent::Output { content: resp },
-        Err(e) => SystemEvent::Error { source: "serial".to_string(), message: e },
-    }
-}
-
-async fn alias_light(args: &[&str], state: &AppState) -> SystemEvent {
-    let action = args.get(0).copied().unwrap_or("");
-    let cmd = match action {
-        "on" => Some("LED_ON"),
-        "off" => Some("LED_OFF"),
-        "toggle" => Some("LED_TOGGLE"),
-        _ => None,
-    };
-    if let Some(cmd) = cmd {
-        let serial = state.serial.read().await;
-        if !serial.is_connected() {
-            return SystemEvent::Error { source: "serial".to_string(), message: "Not connected".to_string() };
-        }
-        if let Err(e) = serial.send_command(cmd) {
-            return SystemEvent::Error { source: "serial".to_string(), message: format!("Send failed: {}", e) };
-        }
-        return SystemEvent::Output { content: format!("Light {}", action) };
-    }
-    SystemEvent::Error { source: "serial".to_string(), message: "Usage: light <on|off|toggle>".to_string() }
-}
-
 async fn forward_to_arduino(cmd: &str, state: &AppState) -> SystemEvent {
     let serial = state.serial.read().await;
     if !serial.is_connected() {
@@ -257,6 +284,23 @@ async fn forward_to_arduino(cmd: &str, state: &AppState) -> SystemEvent {
     match serial.read_line(5000) {
         Ok(response) => SystemEvent::Output { content: response },
         Err(e) => SystemEvent::Error { source: "serial".to_string(), message: e },
+    }
+}
+
+async fn forward_via_transport(cmd: &str, state: &AppState) -> SystemEvent {
+    let t = *state.transport.read().await;
+    match t {
+        Transport::Serial => forward_to_arduino(cmd, state).await,
+        Transport::Mqtt => forward_to_mqtt(cmd, state).await,
+    }
+}
+
+async fn forward_to_mqtt(cmd: &str, state: &AppState) -> SystemEvent {
+    let mqtt = state.mqtt.read().await;
+    // Publish the raw command; device should act and (optionally) publish telemetry
+    match mqtt.publish("miniverse/command", cmd.as_bytes()).await {
+        Ok(_) => SystemEvent::Output { content: format!("MQTT: published '{}'", cmd) },
+        Err(e) => SystemEvent::Error { source: "mqtt".to_string(), message: e },
     }
 }
 

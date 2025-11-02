@@ -32,6 +32,15 @@ pub enum SystemEvent {
     
     #[serde(rename = "mode_changed")]
     ModeChanged { mode: String },
+
+    #[serde(rename = "transport_changed")]
+    TransportChanged {
+        transport: String,
+        publish_topic: String,
+        subscribe_topics: Vec<String>,
+    },
+
+    
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
