@@ -270,7 +270,7 @@ Version:  {}
 Platform: {}
 
 Backend:     Rust + Actix Web
-Frontend:    Astro + React + TypeScript
+Frontend:    Astro + TypeScript
 Connection:  WebSocket Real-time
 Serial:      tokio-serial
 
