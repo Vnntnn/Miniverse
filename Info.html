@@ -1,0 +1,161 @@
+
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniVerse Project Info</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    body {
+      background: radial-gradient(circle at top, #001100, #000);
+      color: #00ff66;
+      font-family: 'Press Start 2P', monospace;
+      margin: 0;
+      padding: 30px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-shadow: 0 0 10px #00ff66;
+      line-height: 1.8;
+    }
+
+    h1, h2 {
+      text-align: center;
+      border-bottom: 2px solid #00ff66;
+      padding-bottom: 10px;
+      margin-top: 25px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-top: 10px;
+    }
+
+    h2 {
+      font-size: 1rem;
+      color: #00ff99;
+    }
+
+    .card {
+      background: rgba(0, 20, 0, 0.8);
+      border: 2px solid #00ff66;
+      border-radius: 15px;
+      box-shadow: 0 0 15px #00ff66;
+      padding: 25px;
+      width: 90%;
+      max-width: 900px;
+      margin-bottom: 30px;
+    }
+
+    .section {
+      margin-bottom: 25px;
+    }
+
+    ul {
+      list-style: none;
+      padding-left: 15px;
+    }
+
+    ul li::before {
+      content: "▸ ";
+      color: #00ff99;
+    }
+
+    .blink {
+      animation: blink 1.2s infinite steps(2, start);
+    }
+
+    @keyframes blink {
+      to { visibility: hidden; }
+    }
+
+    .footer {
+      font-size: 10px;
+      color: #00cc55;
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    a {
+      color: #00ff99;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>MINIVERSE PROJECT <span class="blink">_</span></h1>
+
+  <div class="card">
+    <h2>สมาชิกในโครงการ</h2>
+    <ul>
+      <li>67070012 — <b>นางสาว กิรณา ศรีเพชรพูล</b></li>
+      <li>67070065 — <b>นาย ธนบดี อังกุลดี</b></li>
+      <li>67070081 — <b>นาย ธีธัช สุขวิมลไพศาล</b></li>
+      <li>67070277 — <b>นางสาว วรภา พุ่มฉัตร</b></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>วัตถุประสงค์</h2>
+    <ul>
+      <li>เพื่อพัฒนาระบบควบคุมและอ่านค่าจาก Arduino ผ่านเว็บไซต์ได้แบบเรียลไทม์</li>
+      <li>เพื่อให้ผู้ใช้สามารถทดลอง Sensor ได้โดยไม่ต้องอัปโหลดโค้ดทุกครั้ง</li>
+      <li>เพื่อสร้างสื่อการเรียนรู้ที่เข้าใจง่ายสำหรับผู้เริ่มต้นศึกษาด้าน IoT</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>แนวคิดและหลักการทำงานของระบบ</h2>
+    <p>ระบบทำงานโดยใช้สถาปัตยกรรมแบบ MQTT (Message Queuing Telemetry Transport) เพื่อสื่อสารระหว่าง Arduino กับเว็บแอปพลิเคชัน</p>
+
+    <h3>การทำงานหลัก</h3>
+    <ul>
+      <li>Arduino UNO R4 WiFi เชื่อมต่ออินเทอร์เน็ตผ่าน WiFi และเชื่อมกับ MQTT Broker (mqtt-dashboard.com)</li>
+      <li>บอร์ดจะ Subscribe หัวข้อ <b>miniverse/command</b> เพื่อรอรับคำสั่งจากเว็บไซต์</li>
+      <li>เว็บไซต์จะ Publish คำสั่งไปที่หัวข้อนี้ (เช่น <b>light on, temp, distance</b>)</li>
+      <li>Arduino ประมวลผลคำสั่งและส่งค่ากลับผ่านหัวข้อ <b>miniverse/data</b> เพื่อให้เว็บนำมาแสดงผล</li>
+      <li>ผู้ใช้สามารถดูข้อมูลแบบเรียลไทม์ได้บนหน้าเว็บโดยไม่ต้องอัปโหลดโค้ดใหม่</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ ส่วนประกอบของระบบ</h2>
+    <h3>Hardware</h3>
+    <ul>
+      <li>Arduino UNO R4 WiFi</li>
+      <li>DHT11</li>
+      <li>Ultrasonic Sensor</li>
+      <li>LED</li>
+      <li>LCD I2C</li>
+    </ul>
+
+    <h3>Software</h3>
+    <ul>
+      <li>Arduino IDE</li>
+      <li>MQTT Broker (mqtt-dashboard.com)</li>
+      <li>HTML + JS (MQTT.js)</li>
+      <li>GitHub Pages</li>
+    </ul>
+
+    <h3>Library</h3>
+    <ul>
+      <li>WiFiS3.h</li>
+      <li>MQTTClient.h</li>
+      <li>LiquidCrystal_I2C.h</li>
+      <li>DHT.h</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    © 2025 MiniVerse Project — <a href="index.html">กลับหน้าหลัก</a>
+  </div>
+
+</body>
+</html>
