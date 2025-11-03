@@ -1,0 +1,407 @@
+
+<div id="status-bar">
+  <div class="left">
+    <span class="title">Miniverse Terminal</span>
+    <span id="mode-pill" class="pill">Normal</span>
+    <span id="transport-pill" class="pill">Serial</span>
+  </div>
+  <div class="right">
+    <div class="status-item">
+      <span id="ws-dot" class="dot gray"></span>
+      <span id="ws-text" class="value">WS: Connecting...</span>
+    </div>
+    <div class="status-item">
+      <span id="transport-dot" class="dot gray"></span>
+      <span id="transport-text" class="value">Transport: Serial</span>
+      <button id="topics-toggle" class="toggle" type="button" title="Toggle topics">▸</button>
+      <span id="transport-topics" class="value"></span>
+    </div>
+    <div class="status-item">
+      <span id="serial-dot" class="dot gray"></span>
+      <span id="serial-text" class="value">Serial: Not connected</span>
+    </div>
+    <button id="monitor-toggle" class="clear-btn" type="button" title="Toggle MQTT monitor">MQTT Monitor</button>
+    <button id="clear-btn" class="clear-btn" type="button">Clear</button>
+  </div>
+</div>
+<div id="terminal"></div>
+
+<!-- Floating MQTT monitor panel -->
+<div id="mqtt-monitor" hidden>
+  <div class="monitor-header">
+    <span>MQTT Monitor</span>
+    <button id="monitor-clear" class="mini-btn" type="button">Clear</button>
+  </div>
+  <div id="monitor-content"></div>
+  <div class="monitor-footer">Showing last 20 messages per topic</div>
+  
+</div>
+
+<style>
+  #status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0E1116;
+    border-bottom: 1px solid #1F2430;
+    padding: 8px 12px;
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 14px;
+    color: #C8D1E1;
+    gap: 16px;
+  }
+
+  .left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .title {
+    color: #E5E7EB;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .pill {
+    padding: 2px 8px;
+    border: 1px solid #2C3444;
+    border-radius: 999px;
+    background: #141821;
+    color: #C8D1E1;
+    font-size: 12px;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .dot.green { background: #20d14b; }
+  .dot.red   { background: #e55353; }
+  .dot.gray  { background: #5a5a5a; }
+
+  .value { color: #C8D1E1; }
+
+  #transport-topics {
+    display: block;
+    white-space: pre-wrap; /* allow multi-line topics */
+    color: #9FB2CC;
+    font-size: 12px;
+  }
+
+  .clear-btn {
+    background: transparent;
+    color: #E5E7EB;
+    border: 1px solid #2C3444;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .clear-btn:hover { background: #161C26; }
+
+  #terminal {
+    width: 100%;
+    /* Constrain terminal to viewport height minus status bar */
+    height: calc(100vh - 56px);
+    background: #000;
+    padding: 10px;
+    overflow: hidden; /* prevent page from growing; use xterm's internal scroll */
+    box-sizing: border-box;
+  }
+
+  #mqtt-monitor {
+    position: fixed;
+    top: 46px; /* just below status bar */
+    right: 12px;
+    width: 360px;
+    max-height: 60vh;
+    background: #0E1116;
+    border: 1px solid #2C3444;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+  }
+
+  .monitor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: #141821;
+    border-bottom: 1px solid #2C3444;
+    color: #E5E7EB;
+    font-weight: 600;
+  }
+
+  .mini-btn {
+    background: transparent;
+    color: #9FB2CC;
+    border: 1px solid #2C3444;
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  #monitor-content {
+    padding: 8px 10px;
+    overflow: auto;
+    flex: 1;
+    color: #C8D1E1;
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 12px;
+  }
+
+  .topic-block { margin-bottom: 10px; }
+  .topic-title { color: #76C2E8; font-weight: 600; margin-bottom: 6px; word-break: break-all; }
+  .msg-row { display: flex; gap: 8px; align-items: baseline; }
+  .msg-ts { color: #9FB2CC; min-width: 68px; font-size: 11px; }
+  .msg-payload { color: #E5E7EB; word-break: break-word; }
+
+  .monitor-footer { padding: 6px 10px; font-size: 11px; color: #9FB2CC; border-top: 1px solid #2C3444; background: #0E131B; }
+
+  .toggle {
+    background: transparent;
+    color: #9FB2CC;
+    border: 1px solid #2C3444;
+    border-radius: 4px;
+    padding: 0 6px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .toggle.active { color: #E5E7EB; }
+
+  :global(.xterm) { height: 100%; }
+
+  :global(.xterm-viewport) {
+    scrollbar-width: thin;
+    scrollbar-color: #4B5563 #0E1116;
+  }
+</style>
+
+<script>
+  import { TerminalManager } from '../client/terminal';
+  import { wsClient } from '../lib/websocket';
+
+  let terminal: TerminalManager | null = null;
+  let topicsExpanded = false;
+  let lastBoardId: string | null = null;
+  const monitorStore = new Map(); // topic -> array of {ts, payload}
+  const PER_TOPIC_LIMIT = 20;
+
+  function setDot(id: string, state: 'green'|'red'|'gray') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('green', 'red', 'gray');
+    el.classList.add(state);
+  }
+
+  function setText(id: string, text: string) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function setMode(mode: string) {
+    const pill = document.getElementById('mode-pill');
+    if (pill) pill.textContent = mode;
+  }
+
+  function setTransport(transport: 'serial'|'mqtt', publish?: string, subs?: string[]) {
+    const dot = document.getElementById('transport-dot');
+    const text = document.getElementById('transport-text');
+    const topics = document.getElementById('transport-topics');
+    const pill = document.getElementById('transport-pill');
+    const toggle = document.getElementById('topics-toggle');
+    if (text) text.textContent = `Transport: ${transport.toUpperCase()}`;
+    if (pill) pill.textContent = transport.toUpperCase();
+    if (transport === 'mqtt') {
+      dot?.classList.remove('gray'); dot?.classList.add('green');
+      const list = (subs && subs.length) ? subs : ['miniverse/#'];
+      const subStr = list.join('\n');
+      if (topics) topics.textContent = `sub:\n${subStr}`;
+      if (toggle) {
+        toggle.style.display = 'inline-block';
+        toggle.classList.toggle('active', topicsExpanded);
+        topics!.style.display = topicsExpanded ? 'inline' : 'none';
+      }
+    } else {
+      dot?.classList.remove('green'); dot?.classList.add('gray');
+      if (topics) { topics.textContent = ''; topics.style.display = 'none'; }
+      if (toggle) toggle.style.display = 'none';
+    }
+  }
+
+  async function init() {
+    const container = document.getElementById('terminal');
+    if (!container) return;
+
+    try {
+      await wsClient.connect();
+
+      // Initial states
+      setDot('ws-dot', 'green');
+      setText('ws-text', 'WS: Connected');
+      setDot('serial-dot', 'gray');
+      setText('serial-text', 'Serial: Not connected');
+      setMode('Normal');
+
+      // Wire Clear button
+  const clearBtn = document.getElementById('clear-btn');
+  clearBtn?.addEventListener('click', () => terminal?.clear(true));
+
+      // Events
+      wsClient.on('connected', () => {
+        setDot('ws-dot', 'green');
+        setText('ws-text', 'WS: Connected');
+      });
+
+      wsClient.on('serial_status', (e: any) => {
+        if (e.connected && e.board_name) {
+          setDot('serial-dot', 'green');
+          const idSuffix = lastBoardId ? ` (${lastBoardId})` : '';
+          setText('serial-text', `Serial: ${e.board_name}${idSuffix}`);
+        } else {
+          setDot('serial-dot', 'gray');
+          setText('serial-text', 'Serial: Not connected');
+        }
+      });
+
+      wsClient.on('mode_changed', (e: any) => {
+        const mode = e.mode.charAt(0).toUpperCase() + e.mode.slice(1);
+        setMode(mode);
+        // Also ask terminal to refresh prompt immediately
+        if (terminal) { (terminal as any).pendingPrompt = false; }
+        terminal?.clear(false); // do not show welcome, just force repaint
+      });
+
+      wsClient.on('transport_changed', (e: any) => {
+        const t = (e.transport || 'serial').toLowerCase();
+        setTransport(t as any, e.publish_topic, e.subscribe_topics);
+        lastBoardId = e.board_id || lastBoardId;
+        // Also refresh serial text to include board id when available
+        const currentText = (document.getElementById('serial-text') as HTMLElement)?.textContent || '';
+        if (lastBoardId && currentText.startsWith('Serial: ') && !currentText.includes(`(${lastBoardId})`)) {
+          // append id if a board name is shown
+          const parts = currentText.match(/^Serial: (.+)$/);
+          if (parts && parts[1] && !parts[1].includes('Not connected')) {
+            setText('serial-text', `Serial: ${parts[1]} (${lastBoardId})`);
+          }
+        }
+      });
+
+      // MQTT messages: feed monitor store
+      wsClient.on('mqtt_message', (e: any) => {
+        const arr = monitorStore.get(e.topic) || [];
+        const now = new Date();
+        const ts = now.toTimeString().slice(0,8);
+        const sensor = parseSensorFromTopic(e.topic);
+        arr.push({ ts, payload: e.payload, sensor });
+        while (arr.length > PER_TOPIC_LIMIT) arr.shift();
+        monitorStore.set(e.topic, arr);
+        renderMonitor();
+      });
+
+      // Toggle topics expand/collapse
+      const tgl = document.getElementById('topics-toggle');
+      tgl?.addEventListener('click', () => {
+        topicsExpanded = !topicsExpanded;
+        const t = document.getElementById('transport-text')?.textContent?.toLowerCase().includes('mqtt') ? 'mqtt' : 'serial';
+        // Re-render to apply state
+        setTransport(t as 'serial'|'mqtt');
+      });
+
+      terminal = new TerminalManager(container);
+    } catch (err) {
+      console.error('Init failed:', err);
+      setDot('ws-dot', 'red');
+      setText('ws-text', 'WS: Disconnected');
+  setTransport('serial');
+  setDot('serial-dot', 'gray');
+      setText('serial-text', 'Serial: Not connected');
+      setMode('Normal');
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.addEventListener('beforeunload', () => terminal?.destroy());
+
+  // Monitor UI wiring
+  function renderMonitor() {
+    const content = document.getElementById('monitor-content');
+    if (!content) return;
+    if (monitorStore.size === 0) {
+      content.innerHTML = '<div style="color:#9FB2CC">No messages yet.</div>';
+      return;
+    }
+    const parts: string[] = [];
+    Array.from(monitorStore.keys()).sort().forEach((topic) => {
+      const items = monitorStore.get(topic) || [];
+      parts.push(`<div class="topic-block">`);
+      parts.push(`<div class="topic-title">${topic}</div>`);
+      items.forEach((m: any) => {
+        const label = m.sensor ? ` <span style=\"color:#9FB2CC\">(${m.sensor})</span>` : '';
+        parts.push(`<div class="msg-row"><span class="msg-ts">${m.ts}</span><span class="msg-payload">${escapeHtml(m.payload)}</span>${label}</div>`);
+      });
+      parts.push(`</div>`);
+    });
+    content.innerHTML = parts.join('');
+    // Auto-scroll to bottom
+    content.scrollTop = content.scrollHeight;
+  }
+
+  function escapeHtml(s: string) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function parseSensorFromTopic(topic: string): string | null {
+    // Expect: miniverse/<board>/<component>/<suffix>
+    const segs = topic.split('/');
+    if (segs.length >= 4 && segs[0] === 'miniverse') {
+      return segs[2];
+    }
+    return null;
+  }
+
+  const monitorToggle = document.getElementById('monitor-toggle');
+  const monitorPanel = document.getElementById('mqtt-monitor');
+  monitorToggle?.addEventListener('click', () => {
+    if (!monitorPanel) return;
+    const hidden = monitorPanel.hasAttribute('hidden');
+    if (hidden) {
+      monitorPanel.removeAttribute('hidden');
+      renderMonitor();
+    } else {
+      monitorPanel.setAttribute('hidden', '');
+    }
+  });
+
+  const monitorClear = document.getElementById('monitor-clear');
+  monitorClear?.addEventListener('click', () => {
+    monitorStore.clear();
+    renderMonitor();
+  });
+</script>
